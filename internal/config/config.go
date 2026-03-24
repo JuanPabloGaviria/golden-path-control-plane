@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -217,6 +218,16 @@ func (c Config) validate() error {
 		return errors.New("config: AUTH_ISSUER must not be empty")
 	}
 
+	if c.AppEnv == "production" {
+		if c.Auth.Mode == authModeHMAC {
+			return errors.New("config: AUTH_MODE=hmac is not allowed when APP_ENV=production")
+		}
+
+		if err := validateProductionDatabaseURL(c.Database.URL); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -403,4 +414,18 @@ func redactURL(value string) string {
 	}
 
 	return value[:schemeSplit+3] + "***redacted***" + value[at:]
+}
+
+func validateProductionDatabaseURL(rawURL string) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("config: DATABASE_URL must be a valid URL in production: %w", err)
+	}
+
+	sslMode := strings.TrimSpace(parsed.Query().Get("sslmode"))
+	if sslMode == "" || strings.EqualFold(sslMode, "disable") {
+		return errors.New("config: DATABASE_URL must set sslmode to a non-disable value when APP_ENV=production")
+	}
+
+	return nil
 }

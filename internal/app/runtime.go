@@ -48,9 +48,9 @@ func Bootstrap(ctx context.Context) (*Runtime, error) {
 		return nil, err
 	}
 
-	if err := migrations.Ensure(ctx, pool); err != nil {
+	if err := migrations.EnsureCompatible(ctx, pool); err != nil {
 		pool.Close()
-		return nil, err
+		return nil, fmt.Errorf("bootstrap: schema compatibility: %w", err)
 	}
 
 	validator, err := auth.NewValidator(ctx, cfg.Auth)

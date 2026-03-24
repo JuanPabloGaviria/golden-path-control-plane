@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 API_URL="${CONTROL_PLANE_API_URL:-http://localhost:8080}"
 RUN_ID="$(date +%s)"
 SMOKE_SKIP_RUNTIME_START="${SMOKE_SKIP_RUNTIME_START:-0}"
+SMOKE_SKIP_MIGRATE="${SMOKE_SKIP_MIGRATE:-0}"
 
 if [[ -z "${DATABASE_URL:-}" ]]; then
   echo "DATABASE_URL must be set for smoke tests" >&2
@@ -22,6 +23,7 @@ cleanup() {
   fi
   rm -f "${SERVICE_FILE:-}"
   if [[ ${exit_code} -ne 0 ]]; then
+    [[ -f /tmp/golden-path-migrate.log ]] && cat /tmp/golden-path-migrate.log >&2
     [[ -f /tmp/golden-path-api.log ]] && cat /tmp/golden-path-api.log >&2
     [[ -f /tmp/golden-path-worker.log ]] && cat /tmp/golden-path-worker.log >&2
   fi
@@ -29,6 +31,10 @@ cleanup() {
 trap cleanup EXIT
 
 cd "${ROOT_DIR}"
+
+if [[ "${SMOKE_SKIP_MIGRATE}" != "1" ]]; then
+  go run ./cmd/migrate >/tmp/golden-path-migrate.log 2>&1
+fi
 
 if [[ "${SMOKE_SKIP_RUNTIME_START}" != "1" ]]; then
   go run ./cmd/api >/tmp/golden-path-api.log 2>&1 &

@@ -52,6 +52,39 @@ func TestLoadTokenIssuerConfigDoesNotRequireDatabase(t *testing.T) {
 	}
 }
 
+func TestLoadRejectsProductionHMAC(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("DATABASE_URL", "postgres://controlplane:secret@db.internal:5432/controlplane?sslmode=require")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected Load to reject production hmac auth")
+	}
+
+	if !strings.Contains(err.Error(), "AUTH_MODE=hmac") {
+		t.Fatalf("expected production auth error, got %v", err)
+	}
+}
+
+func TestLoadRejectsProductionDatabaseWithoutTLS(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("AUTH_MODE", "oidc")
+	t.Setenv("AUTH_HMAC_SECRET", "")
+	t.Setenv("AUTH_OIDC_ISSUER_URL", "https://issuer.example.com")
+	t.Setenv("DATABASE_URL", "postgres://controlplane:secret@db.internal:5432/controlplane?sslmode=disable")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected Load to reject production database without TLS")
+	}
+
+	if !strings.Contains(err.Error(), "sslmode") {
+		t.Fatalf("expected sslmode error, got %v", err)
+	}
+}
+
 func setValidEnv(t *testing.T) {
 	t.Helper()
 

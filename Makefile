@@ -32,6 +32,7 @@ build:
 	$(GO) build ./cmd/api
 	$(GO) build ./cmd/worker
 	$(GO) build ./cmd/cli
+	$(GO) build ./cmd/migrate
 
 vuln:
 	govulncheck ./...

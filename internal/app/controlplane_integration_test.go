@@ -38,8 +38,8 @@ func TestControlPlaneHappyPath(t *testing.T) {
 	}
 	defer pool.Close()
 
-	if err := migrations.Ensure(ctx, pool); err != nil {
-		t.Fatalf("Ensure returned error: %v", err)
+	if err := migrations.Apply(ctx, pool); err != nil {
+		t.Fatalf("Apply returned error: %v", err)
 	}
 
 	if _, err := pool.Exec(ctx, `
@@ -299,8 +299,8 @@ func setupIntegrationHarness(t *testing.T) (context.Context, *postgres.Store, *C
 
 	t.Cleanup(pool.Close)
 
-	if err := migrations.Ensure(ctx, pool); err != nil {
-		t.Fatalf("Ensure returned error: %v", err)
+	if err := migrations.Apply(ctx, pool); err != nil {
+		t.Fatalf("Apply returned error: %v", err)
 	}
 
 	if _, err := pool.Exec(ctx, `
