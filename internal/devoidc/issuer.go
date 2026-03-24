@@ -210,8 +210,8 @@ func (i *Issuer) keys(w http.ResponseWriter, r *http.Request) {
 			"alg": "RS256",
 			"use": "sig",
 			"kid": i.keyID,
-			"n":   encodeBigInt(i.privateKey.PublicKey.N),
-			"e":   encodeBigInt(big.NewInt(int64(i.privateKey.PublicKey.E))),
+			"n":   encodeBigInt(i.privateKey.N),
+			"e":   encodeBigInt(big.NewInt(int64(i.privateKey.E))),
 		}},
 	})
 }

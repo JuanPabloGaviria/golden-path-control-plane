@@ -17,9 +17,11 @@ cleanup() {
   local exit_code=$?
   if [[ -n "${API_PID:-}" ]]; then
     kill "${API_PID}" >/dev/null 2>&1 || true
+    wait "${API_PID}" 2>/dev/null || true
   fi
   if [[ -n "${WORKER_PID:-}" ]]; then
     kill "${WORKER_PID}" >/dev/null 2>&1 || true
+    wait "${WORKER_PID}" 2>/dev/null || true
   fi
   rm -f "${SERVICE_FILE:-}"
   if [[ ${exit_code} -ne 0 ]]; then

@@ -14,7 +14,9 @@ This repository claims only what is exercised locally or in CI-equivalent comman
 | Containerized runtime proof works with OIDC and PostgreSQL in Docker Compose | `make smoke-compose` |
 | Kubernetes deployment assets are not theater and work in a real local cluster | `make smoke-kind` |
 | Kubernetes manifests render cleanly | `kubectl kustomize deployments/kubernetes/overlays/local-kind` |
-| Dependency vulnerabilities are checked in Go modules | `govulncheck ./...` |
+| Built release artifacts are scanned for reachable Go vulnerabilities with a pinned scanner toolchain | `make vuln` |
+| Kubernetes and Docker assets are scanned for high and critical misconfiguration findings | `make scan-config` |
+| Built container images are scanned for high and critical vulnerabilities | `make scan-image` |
 
 ## Truthfulness Boundaries
 

@@ -3,6 +3,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export CONTROL_PLANE_HTTP_PORT="${CONTROL_PLANE_HTTP_PORT:-8080}"
+export CONTROL_PLANE_OIDC_PORT="${CONTROL_PLANE_OIDC_PORT:-9000}"
 export APP_ENV=development
 export APP_LOG_LEVEL=INFO
 export DATABASE_URL="${DATABASE_URL:-postgres://controlplane:controlplane@localhost:5432/controlplane?sslmode=disable}"
@@ -21,14 +23,14 @@ export JOB_LEASE_DURATION="${JOB_LEASE_DURATION:-30s}"
 export JOB_MAX_ATTEMPTS="${JOB_MAX_ATTEMPTS:-5}"
 export AUTH_MODE="${AUTH_MODE:-oidc}"
 export AUTH_AUDIENCE="${AUTH_AUDIENCE:-golden-path-control-plane}"
-export AUTH_ISSUER="${AUTH_ISSUER:-http://localhost:9000}"
-export AUTH_OIDC_ISSUER_URL="${AUTH_OIDC_ISSUER_URL:-http://localhost:9000}"
-export AUTH_OIDC_JWKS_URL="${AUTH_OIDC_JWKS_URL:-http://localhost:9000/keys}"
+export AUTH_ISSUER="${AUTH_ISSUER:-http://localhost:${CONTROL_PLANE_OIDC_PORT}}"
+export AUTH_OIDC_ISSUER_URL="${AUTH_OIDC_ISSUER_URL:-http://localhost:${CONTROL_PLANE_OIDC_PORT}}"
+export AUTH_OIDC_JWKS_URL="${AUTH_OIDC_JWKS_URL:-http://localhost:${CONTROL_PLANE_OIDC_PORT}/keys}"
 export OTEL_SERVICE_NAME="${OTEL_SERVICE_NAME:-golden-path-control-plane}"
 export OTEL_EXPORTER_OTLP_ENDPOINT="${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
 export PROMETHEUS_NAMESPACE="${PROMETHEUS_NAMESPACE:-goldenpath}"
-export CONTROL_PLANE_API_URL="${CONTROL_PLANE_API_URL:-http://localhost:8080}"
-export OIDC_DEV_ISSUER_URL="${OIDC_DEV_ISSUER_URL:-http://localhost:9000}"
+export CONTROL_PLANE_API_URL="${CONTROL_PLANE_API_URL:-http://localhost:${CONTROL_PLANE_HTTP_PORT}}"
+export OIDC_DEV_ISSUER_URL="${OIDC_DEV_ISSUER_URL:-http://localhost:${CONTROL_PLANE_OIDC_PORT}}"
 export OIDC_DEV_AUDIENCE="${OIDC_DEV_AUDIENCE:-golden-path-control-plane}"
 export OIDC_DEV_ENGINEER_SUBJECT="${OIDC_DEV_ENGINEER_SUBJECT:-owner@example.com}"
 export OIDC_DEV_PLATFORM_ADMIN_SUBJECT="${OIDC_DEV_PLATFORM_ADMIN_SUBJECT:-platform-admin@example.com}"

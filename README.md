@@ -16,7 +16,8 @@ This repository does not claim production readiness. It is a strong v1 control p
 
 - Go `1.25.8`
 - PostgreSQL `16+` for local API, worker, integration tests, and smoke flow
-- Docker for [deployments/docker-compose.yml](./deployments/docker-compose.yml) and [scripts/compose_smoke.sh](./scripts/compose_smoke.sh)
+- Docker with the Compose CLI plugin for [deployments/docker-compose.yml](./deployments/docker-compose.yml) and [scripts/compose_smoke.sh](./scripts/compose_smoke.sh)
+- `kubectl`, `kind`, `curl`, and `jq` for the verified local Kubernetes proof
 
 ## Architecture
 
@@ -74,14 +75,21 @@ Kubernetes assets live under [deployments/kubernetes/README.md](./deployments/ku
 
 ## Quality Gates
 
-- formatting: `make fmt`
+- pinned tool bootstrap: `make tools`
+- formatting write: `make fmt`
+- formatting check: `make check-fmt`
 - lint: `make lint`
 - unit tests: `make test`
 - integration tests: `make integration INTEGRATION_DATABASE_URL=...`
 - race tests: `make race`
 - preflight checks: `make preflight`
+- core non-mutating CI gate: `make ci`
+- OpenAPI contract: `make contract`
+- Kubernetes render check: `make render-k8s`
 - build: `make build`
 - vulnerability scan: `make vuln`
+- config and manifest scan: `make scan-config`
+- image scan: `make scan-image`
 - contract and proof evidence: [docs/verification-matrix.md](./docs/verification-matrix.md)
 
 ## Public API

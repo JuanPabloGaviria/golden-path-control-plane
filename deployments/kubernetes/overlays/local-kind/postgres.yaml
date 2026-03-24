@@ -18,6 +18,40 @@ spec:
         app.kubernetes.io/component: database
         app.kubernetes.io/part-of: golden-path-control-plane
     spec:
+      securityContext:
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: postgres-permissions
+          image: busybox:1.36.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -ceu
+            - |
+              chown -R 999:999 /var/lib/postgresql/data /var/run/postgresql /tmp
+              chmod 0700 /var/lib/postgresql/data
+              chmod 3775 /var/run/postgresql
+              chmod 1777 /tmp
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - CHOWN
+                - FOWNER
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+            - name: postgres-run
+              mountPath: /var/run/postgresql
+            - name: postgres-tmp
+              mountPath: /tmp
       containers:
         - name: postgres
           image: postgres:16-alpine
@@ -59,11 +93,28 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
+            - name: postgres-run
+              mountPath: /var/run/postgresql
+            - name: postgres-tmp
+              mountPath: /tmp
       volumes:
         - name: postgres-data
+          emptyDir: {}
+        - name: postgres-run
+          emptyDir: {}
+        - name: postgres-tmp
           emptyDir: {}
 ---
 apiVersion: v1

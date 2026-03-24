@@ -62,6 +62,14 @@ func Apply(ctx context.Context, pool *pgxpool.Pool) error {
 		_, _ = conn.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, advisoryLockKey)
 	}()
 
+	if _, err := conn.Exec(ctx, `CREATE SCHEMA IF NOT EXISTS public`); err != nil {
+		return fmt.Errorf("migrations: ensure public schema: %w", err)
+	}
+
+	if _, err := conn.Exec(ctx, `SET search_path TO public`); err != nil {
+		return fmt.Errorf("migrations: set search_path: %w", err)
+	}
+
 	if _, err := conn.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			version TEXT PRIMARY KEY,

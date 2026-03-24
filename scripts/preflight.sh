@@ -28,4 +28,9 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 
+if ! docker compose version >/dev/null 2>&1; then
+  echo "docker compose CLI plugin is not available" >&2
+  exit 1
+fi
+
 echo "preflight checks passed"

@@ -57,21 +57,13 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Check formatting
-        run: test -z "$(gofmt -l .)"
+      - uses: azure/setup-kubectl@v4
 
-      - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: v2.5.0
-          install-mode: binary
-          args: --timeout=5m
+      - name: Install pinned Go tools
+        run: make tools
 
-      - name: Unit tests
-        run: go test ./...
-
-      - name: Race tests
-        run: go test -race ./...
+      - name: Core verification
+        run: make ci
 
       - name: Integration tests
         run: go test -tags=integration ./...
@@ -79,19 +71,54 @@ jobs:
       - name: Integration race tests
         run: go test -race -tags=integration ./...
 
-      - name: Build binaries
-        run: |
-          go build ./cmd/api
-          go build ./cmd/worker
-          go build ./cmd/cli
-          go build ./cmd/migrate
-          go build ./cmd/devoidc
-
-      - name: Install govulncheck
-        run: go install golang.org/x/vuln/cmd/govulncheck@latest
-
-      - name: Vulnerability scan
-        run: govulncheck ./...
+      - name: Render Kubernetes overlay
+        run: make render-k8s
 
       - name: Smoke flow
         run: ./scripts/smoke.sh
+
+  runtime-proof:
+    runs-on: ubuntu-latest
+    needs: verify
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Docker Compose OIDC smoke
+        run: make smoke-compose
+
+  kind-proof:
+    runs-on: ubuntu-latest
+    needs: verify
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - uses: azure/setup-kubectl@v4
+
+      - name: Install kind
+        run: go install sigs.k8s.io/kind@v0.23.0
+
+      - name: Add Go bin to PATH
+        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: kind smoke
+        run: make smoke-kind
+
+  security:
+    runs-on: ubuntu-latest
+    needs: verify
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Config and manifest scan
+        run: make scan-config
+
+      - name: Image scan
+        run: make scan-image
