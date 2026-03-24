@@ -243,6 +243,7 @@ func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 	var validationErr app.ValidationError
+	var stateConflictErr app.StateConflictError
 	var pgErr *pgconn.PgError
 
 	switch {
@@ -252,6 +253,8 @@ func (s *Server) writeError(w http.ResponseWriter, r *http.Request, err error) {
 		httpx.RespondError(w, r, http.StatusNotFound, "not_found", "Requested resource was not found.", map[string]any{"cause": err.Error()})
 	case errors.As(err, &validationErr):
 		httpx.RespondError(w, r, http.StatusBadRequest, "validation_failed", validationErr.Error(), nil)
+	case errors.As(err, &stateConflictErr) || errors.Is(err, postgres.ErrStateConflict):
+		httpx.RespondError(w, r, http.StatusConflict, "state_conflict", err.Error(), nil)
 	case errors.As(err, &pgErr) && pgErr.Code == "23505":
 		httpx.RespondError(w, r, http.StatusConflict, "conflict", "Resource already exists or violates a uniqueness constraint.", map[string]any{"cause": pgErr.Message})
 	default:
@@ -310,9 +313,10 @@ func metricsMiddleware(metrics *observability.Metrics) func(http.Handler) http.H
 			recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 			start := time.Now()
 			next.ServeHTTP(recorder, r)
+			route := httpx.RoutePattern(r)
 
-			metrics.HTTPRequestsTotal.WithLabelValues(r.URL.Path, r.Method, strconv.Itoa(recorder.status)).Inc()
-			metrics.HTTPRequestLatency.WithLabelValues(r.URL.Path, r.Method).Observe(time.Since(start).Seconds())
+			metrics.HTTPRequestsTotal.WithLabelValues(route, r.Method, strconv.Itoa(recorder.status)).Inc()
+			metrics.HTTPRequestLatency.WithLabelValues(route, r.Method).Observe(time.Since(start).Seconds())
 		})
 	}
 }

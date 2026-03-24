@@ -63,7 +63,7 @@ func validService() domain.Service {
 			ServiceID:                 serviceID,
 			AvailabilityTargetPercent: 99.9,
 			LatencyTargetMilliseconds: 250,
-			Window:                    "30d",
+			TimeWindow:                "30d",
 		},
 	}
 }

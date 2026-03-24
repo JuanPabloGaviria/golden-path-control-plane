@@ -13,7 +13,11 @@ CREATE TABLE IF NOT EXISTS jobs (
     last_error TEXT NULL,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
-    UNIQUE (type, idempotency_key)
+    UNIQUE (type, idempotency_key),
+    CONSTRAINT jobs_type_check CHECK (type IN ('service_evaluation')),
+    CONSTRAINT jobs_status_check CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
+    CONSTRAINT jobs_attempts_check CHECK (attempts >= 0),
+    CONSTRAINT jobs_max_attempts_check CHECK (max_attempts > 0)
 );
 
 CREATE INDEX IF NOT EXISTS idx_jobs_pending_available
@@ -33,7 +37,7 @@ CREATE TABLE IF NOT EXISTS services (
     has_tracing BOOLEAN NOT NULL,
     has_metrics BOOLEAN NOT NULL,
     language TEXT NOT NULL,
-    tier INTEGER NOT NULL,
+    tier INTEGER NOT NULL CHECK (tier BETWEEN 0 AND 3),
     lifecycle TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL
@@ -44,9 +48,11 @@ CREATE TABLE IF NOT EXISTS slo_policies (
     service_id UUID NOT NULL UNIQUE REFERENCES services(id) ON DELETE CASCADE,
     availability_target_percent DOUBLE PRECISION NOT NULL,
     latency_target_milliseconds INTEGER NOT NULL,
-    window TEXT NOT NULL,
+    time_window TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL
+    updated_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT slo_policies_availability_check CHECK (availability_target_percent > 0 AND availability_target_percent <= 100),
+    CONSTRAINT slo_policies_latency_check CHECK (latency_target_milliseconds > 0)
 );
 
 CREATE TABLE IF NOT EXISTS readiness_snapshots (
@@ -57,7 +63,9 @@ CREATE TABLE IF NOT EXISTS readiness_snapshots (
     summary TEXT NOT NULL,
     evaluated_at TIMESTAMPTZ NOT NULL,
     job_id UUID NOT NULL REFERENCES jobs(id),
-    created_at TIMESTAMPTZ NOT NULL
+    created_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT readiness_snapshots_state_check CHECK (state IN ('ready', 'degraded', 'blocked')),
+    CONSTRAINT readiness_snapshots_score_check CHECK (score BETWEEN 0 AND 100)
 );
 
 CREATE INDEX IF NOT EXISTS idx_readiness_snapshots_service_eval
@@ -71,7 +79,8 @@ CREATE TABLE IF NOT EXISTS readiness_check_results (
     status TEXT NOT NULL,
     message TEXT NOT NULL,
     remediation_hint TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL
+    created_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT readiness_check_results_status_check CHECK (status IN ('pass', 'warn', 'fail'))
 );
 
 CREATE TABLE IF NOT EXISTS deployment_candidates (
@@ -86,7 +95,8 @@ CREATE TABLE IF NOT EXISTS deployment_candidates (
     last_snapshot_id UUID NULL REFERENCES readiness_snapshots(id),
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL,
-    evaluated_at TIMESTAMPTZ NULL
+    evaluated_at TIMESTAMPTZ NULL,
+    CONSTRAINT deployment_candidates_status_check CHECK (status IN ('pending', 'approved', 'rejected'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_deployment_candidates_service_created
@@ -98,7 +108,8 @@ CREATE TABLE IF NOT EXISTS promotion_decisions (
     snapshot_id UUID NULL REFERENCES readiness_snapshots(id),
     decision TEXT NOT NULL,
     summary TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL
+    created_at TIMESTAMPTZ NOT NULL,
+    CONSTRAINT promotion_decisions_decision_check CHECK (decision IN ('approved', 'rejected'))
 );
 
 CREATE TABLE IF NOT EXISTS audit_events (

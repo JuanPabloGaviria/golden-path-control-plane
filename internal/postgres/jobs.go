@@ -59,8 +59,8 @@ func (s *Store) ClaimJobs(ctx context.Context, workerID string, batchSize int, l
 	return jobs, nil
 }
 
-func (s *Store) MarkJobCompleted(ctx context.Context, jobID uuid.UUID) error {
-	if _, err := s.pool.Exec(ctx, `
+func (s *Store) MarkJobCompleted(ctx context.Context, jobID uuid.UUID, workerID string) error {
+	commandTag, err := s.pool.Exec(ctx, `
 		UPDATE jobs
 		SET status = 'completed',
 		    locked_at = NULL,
@@ -68,8 +68,15 @@ func (s *Store) MarkJobCompleted(ctx context.Context, jobID uuid.UUID) error {
 		    last_error = '',
 		    updated_at = NOW()
 		WHERE id = $1
-	`, jobID); err != nil {
+		  AND status = 'processing'
+		  AND lock_owner = $2
+	`, jobID, workerID)
+	if err != nil {
 		return fmt.Errorf("postgres: mark job completed: %w", err)
+	}
+
+	if commandTag.RowsAffected() != 1 {
+		return ErrStateConflict
 	}
 
 	return nil
@@ -82,7 +89,7 @@ func (s *Store) MarkJobFailed(ctx context.Context, job domain.Job, failure error
 		backoff = time.Minute
 	}
 
-	if _, err := s.pool.Exec(ctx, `
+	commandTag, err := s.pool.Exec(ctx, `
 		UPDATE jobs
 		SET status = 'failed',
 		    locked_at = NULL,
@@ -91,8 +98,15 @@ func (s *Store) MarkJobFailed(ctx context.Context, job domain.Job, failure error
 		    available_at = $3,
 		    updated_at = $4
 		WHERE id = $1
-	`, job.ID, failure.Error(), now.Add(backoff), now); err != nil {
+		  AND status = 'processing'
+		  AND lock_owner = $5
+	`, job.ID, failure.Error(), now.Add(backoff), now, job.LockOwner)
+	if err != nil {
 		return fmt.Errorf("postgres: mark job failed: %w", err)
+	}
+
+	if commandTag.RowsAffected() != 1 {
+		return ErrStateConflict
 	}
 
 	return nil
@@ -103,8 +117,8 @@ func scanJob(row interface {
 }) (domain.Job, error) {
 	var job domain.Job
 	var payloadBytes []byte
-	var lockOwner string
-	var lastError string
+	var lockOwner *string
+	var lastError *string
 
 	if err := row.Scan(
 		&job.ID,
@@ -125,8 +139,13 @@ func scanJob(row interface {
 		return domain.Job{}, fmt.Errorf("postgres: scan job: %w", err)
 	}
 
-	job.LockOwner = lockOwner
-	job.LastError = lastError
+	if lockOwner != nil {
+		job.LockOwner = *lockOwner
+	}
+
+	if lastError != nil {
+		job.LastError = *lastError
+	}
 
 	if len(payloadBytes) > 0 {
 		if err := json.Unmarshal(payloadBytes, &job.Payload); err != nil {

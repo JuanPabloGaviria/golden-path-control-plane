@@ -25,7 +25,7 @@ func Evaluate(service domain.Service, jobID uuid.UUID, evaluatedAt time.Time) Re
 	tracingStatus, tracingMessage, tracingHint := warnIf(service.HasTracing, "Tracing declared", "Tracing not declared", "Enable tracing or document the gap before production use.")
 	metricsStatus, metricsMessage, metricsHint := warnIf(service.HasMetrics, "Metrics declared", "Metrics not declared", "Enable metrics or document the gap before production use.")
 	deployStatus, deployMessage, deployHint := passIf(service.DeploymentPipeline != "", "Deployment pipeline declared", "Deployment pipeline missing", "Set deployment_pipeline to the owning CI/CD workflow.")
-	sloStatus, sloMessage, sloHint := warnIf(service.SLOPolicy.Window != "" && service.SLOPolicy.AvailabilityTargetPercent > 0 && service.SLOPolicy.LatencyTargetMilliseconds > 0, "SLO policy declared", "SLO policy incomplete", "Define availability, latency, and window targets.")
+	sloStatus, sloMessage, sloHint := warnIf(service.SLOPolicy.TimeWindow != "" && service.SLOPolicy.AvailabilityTargetPercent > 0 && service.SLOPolicy.LatencyTargetMilliseconds > 0, "SLO policy declared", "SLO policy incomplete", "Define availability, latency, and window targets.")
 
 	checks := []domain.ReadinessCheckResult{
 		buildCheck(service.ID, "owner_declared", ownerStatus, ownerMessage, ownerHint),

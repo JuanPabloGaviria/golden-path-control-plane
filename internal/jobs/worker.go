@@ -70,7 +70,7 @@ func (w *Worker) runOnce(ctx context.Context) error {
 			continue
 		}
 
-		if err := w.repo.MarkJobCompleted(ctx, job.ID); err != nil {
+		if err := w.repo.MarkJobCompleted(ctx, job.ID, w.id); err != nil {
 			return fmt.Errorf("worker: mark job completed: %w", err)
 		}
 		w.metrics.WorkerJobsTotal.WithLabelValues(string(job.Type), "completed").Inc()

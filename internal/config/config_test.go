@@ -38,6 +38,20 @@ func TestLoadRedactsSecrets(t *testing.T) {
 	}
 }
 
+func TestLoadTokenIssuerConfigDoesNotRequireDatabase(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("DATABASE_URL", "")
+
+	cfg, err := LoadTokenIssuerConfig()
+	if err != nil {
+		t.Fatalf("LoadTokenIssuerConfig returned error: %v", err)
+	}
+
+	if cfg.Auth.Mode != "hmac" {
+		t.Fatalf("expected hmac auth mode, got %s", cfg.Auth.Mode)
+	}
+}
+
 func setValidEnv(t *testing.T) {
 	t.Helper()
 

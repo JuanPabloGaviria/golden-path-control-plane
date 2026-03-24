@@ -68,6 +68,10 @@ func IssueHMACToken(cfg config.AuthConfig, subject string, role domain.Role, ttl
 		return "", fmt.Errorf("auth: unsupported role %q", role)
 	}
 
+	if ttl <= 0 {
+		return "", errors.New("auth: ttl must be greater than zero")
+	}
+
 	now := time.Now().UTC()
 	claims := Claims{
 		Role: string(role),

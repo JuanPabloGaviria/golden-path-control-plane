@@ -64,7 +64,7 @@ func runToken(args []string) error {
 		return err
 	}
 
-	cfg, err := config.Load()
+	cfg, err := config.LoadTokenIssuerConfig()
 	if err != nil {
 		return err
 	}

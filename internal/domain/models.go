@@ -83,7 +83,7 @@ type SLOPolicy struct {
 	ServiceID                 uuid.UUID `json:"service_id"`
 	AvailabilityTargetPercent float64   `json:"availability_target_percent"`
 	LatencyTargetMilliseconds int       `json:"latency_target_milliseconds"`
-	Window                    string    `json:"window"`
+	TimeWindow                string    `json:"window"`
 	CreatedAt                 time.Time `json:"created_at"`
 	UpdatedAt                 time.Time `json:"updated_at"`
 }
@@ -284,6 +284,27 @@ func (in SLOPolicyInput) Validate() error {
 }
 
 func (in ServicePatch) Validate() error {
+	if in.Description == nil &&
+		in.OwnerEmail == nil &&
+		in.RepositoryURL == nil &&
+		in.RunbookURL == nil &&
+		in.HealthEndpointURL == nil &&
+		in.ObservabilityURL == nil &&
+		in.DeploymentPipeline == nil &&
+		in.HasCI == nil &&
+		in.HasTracing == nil &&
+		in.HasMetrics == nil &&
+		in.Language == nil &&
+		in.Tier == nil &&
+		in.Lifecycle == nil &&
+		in.SLOPolicy == nil {
+		return errors.New("service patch must include at least one field")
+	}
+
+	if in.Description != nil && strings.TrimSpace(*in.Description) == "" {
+		return errors.New("service.description must not be empty")
+	}
+
 	if in.OwnerEmail != nil {
 		if err := validateEmail(*in.OwnerEmail); err != nil {
 			return fmt.Errorf("service.owner_email: %w", err)
@@ -316,6 +337,18 @@ func (in ServicePatch) Validate() error {
 
 	if in.Tier != nil && (*in.Tier < 0 || *in.Tier > 3) {
 		return errors.New("service.tier must be between 0 and 3")
+	}
+
+	if in.DeploymentPipeline != nil && strings.TrimSpace(*in.DeploymentPipeline) == "" {
+		return errors.New("service.deployment_pipeline must not be empty")
+	}
+
+	if in.Language != nil && strings.TrimSpace(*in.Language) == "" {
+		return errors.New("service.language must not be empty")
+	}
+
+	if in.Lifecycle != nil && strings.TrimSpace(*in.Lifecycle) == "" {
+		return errors.New("service.lifecycle must not be empty")
 	}
 
 	if in.SLOPolicy != nil {
@@ -368,9 +401,27 @@ func validateURL(field, value string) error {
 		return fmt.Errorf("%s is required", field)
 	}
 
-	if _, err := url.ParseRequestURI(value); err != nil {
+	parsed, err := url.ParseRequestURI(value)
+	if err != nil {
 		return fmt.Errorf("%s must be a valid URL: %w", field, err)
 	}
 
+	switch parsed.Scheme {
+	case "http", "https":
+	default:
+		return fmt.Errorf("%s must use http or https", field)
+	}
+
 	return nil
+}
+
+func (status CandidateStatus) CanTransitionTo(next CandidateStatus) bool {
+	switch status {
+	case CandidateStatusPending:
+		return next == CandidateStatusApproved || next == CandidateStatusRejected
+	case CandidateStatusApproved, CandidateStatusRejected:
+		return false
+	default:
+		return false
+	}
 }

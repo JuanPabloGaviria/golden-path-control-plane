@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -43,19 +44,27 @@ func NewMetrics(namespace string) (*Metrics, error) {
 		HTTPRequestsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Namespace: namespace,
 			Name:      "http_requests_total",
-			Help:      "Total number of HTTP requests by path and status.",
-		}, []string{"path", "method", "status"}),
+			Help:      "Total number of HTTP requests by route and status.",
+		}, []string{"route", "method", "status"}),
 		HTTPRequestLatency: prometheus.NewHistogramVec(prometheus.HistogramOpts{
 			Namespace: namespace,
 			Name:      "http_request_duration_seconds",
-			Help:      "HTTP request latency by path and method.",
+			Help:      "HTTP request latency by route and method.",
 			Buckets:   prometheus.DefBuckets,
-		}, []string{"path", "method"}),
+		}, []string{"route", "method"}),
 		WorkerJobsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Namespace: namespace,
 			Name:      "worker_jobs_total",
 			Help:      "Worker job outcomes by type and status.",
 		}, []string{"type", "status"}),
+	}
+
+	if err := registry.Register(collectors.NewGoCollector()); err != nil {
+		return nil, err
+	}
+
+	if err := registry.Register(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{})); err != nil {
+		return nil, err
 	}
 
 	if err := registry.Register(metrics.HTTPRequestsTotal); err != nil {

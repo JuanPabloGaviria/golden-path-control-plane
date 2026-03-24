@@ -40,3 +40,16 @@ func TestIssueAndValidateHMACToken(t *testing.T) {
 		t.Fatalf("expected role engineer, got %s", principal.Role)
 	}
 }
+
+func TestIssueHMACTokenRejectsNonPositiveTTL(t *testing.T) {
+	authCfg := config.AuthConfig{
+		Mode:       "hmac",
+		Audience:   "golden-path-control-plane",
+		Issuer:     "golden-path-local",
+		HMACSecret: "12345678901234567890123456789012",
+	}
+
+	if _, err := IssueHMACToken(authCfg, "developer@example.com", domain.RoleEngineer, 0); err == nil {
+		t.Fatal("expected IssueHMACToken to reject zero TTL")
+	}
+}

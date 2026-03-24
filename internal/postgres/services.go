@@ -42,11 +42,11 @@ func (s *Store) CreateService(ctx context.Context, service domain.Service) (doma
 
 	if _, err := tx.Exec(ctx, `
 		INSERT INTO slo_policies (
-			id, service_id, availability_target_percent, latency_target_milliseconds, window, created_at, updated_at
+			id, service_id, availability_target_percent, latency_target_milliseconds, time_window, created_at, updated_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`,
 		service.SLOPolicy.ID, service.ID, service.SLOPolicy.AvailabilityTargetPercent,
-		service.SLOPolicy.LatencyTargetMilliseconds, service.SLOPolicy.Window, service.SLOPolicy.CreatedAt, service.SLOPolicy.UpdatedAt,
+		service.SLOPolicy.LatencyTargetMilliseconds, service.SLOPolicy.TimeWindow, service.SLOPolicy.CreatedAt, service.SLOPolicy.UpdatedAt,
 	); err != nil {
 		return domain.Service{}, fmt.Errorf("postgres: insert slo policy: %w", err)
 	}
@@ -105,12 +105,12 @@ func (s *Store) UpdateService(ctx context.Context, serviceID uuid.UUID, patch do
 		UPDATE slo_policies SET
 			availability_target_percent = $2,
 			latency_target_milliseconds = $3,
-			window = $4,
+			time_window = $4,
 			updated_at = $5
 		WHERE service_id = $1
 	`,
 		current.ID, current.SLOPolicy.AvailabilityTargetPercent, current.SLOPolicy.LatencyTargetMilliseconds,
-		current.SLOPolicy.Window, current.SLOPolicy.UpdatedAt,
+		current.SLOPolicy.TimeWindow, current.SLOPolicy.UpdatedAt,
 	); err != nil {
 		return domain.Service{}, fmt.Errorf("postgres: update slo policy: %w", err)
 	}
@@ -129,7 +129,7 @@ func (s *Store) GetService(ctx context.Context, serviceID uuid.UUID) (domain.Ser
 			s.health_endpoint_url, s.observability_url, s.deployment_pipeline, s.has_ci,
 			s.has_tracing, s.has_metrics, s.language, s.tier, s.lifecycle,
 			s.created_at, s.updated_at,
-			p.id, p.availability_target_percent, p.latency_target_milliseconds, p.window, p.created_at, p.updated_at
+			p.id, p.availability_target_percent, p.latency_target_milliseconds, p.time_window, p.created_at, p.updated_at
 		FROM services s
 		JOIN slo_policies p ON p.service_id = s.id
 		WHERE s.id = $1
@@ -168,14 +168,15 @@ func (s *Store) SaveReadinessEvaluation(ctx context.Context, snapshot domain.Rea
 	}
 
 	results := tx.SendBatch(ctx, batch)
-	defer func() {
-		_ = results.Close()
-	}()
-
 	for range checks {
 		if _, err := results.Exec(); err != nil {
+			_ = results.Close()
 			return fmt.Errorf("postgres: insert readiness check result: %w", err)
 		}
+	}
+
+	if err := results.Close(); err != nil {
+		return fmt.Errorf("postgres: close readiness evaluation batch: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -305,7 +306,7 @@ func scanService(row pgx.Row) (domain.Service, error) {
 		&service.SLOPolicy.ID,
 		&service.SLOPolicy.AvailabilityTargetPercent,
 		&service.SLOPolicy.LatencyTargetMilliseconds,
-		&service.SLOPolicy.Window,
+		&service.SLOPolicy.TimeWindow,
 		&service.SLOPolicy.CreatedAt,
 		&service.SLOPolicy.UpdatedAt,
 	); err != nil {
@@ -362,6 +363,6 @@ func applyServicePatch(service *domain.Service, patch domain.ServicePatch) {
 	if patch.SLOPolicy != nil {
 		service.SLOPolicy.AvailabilityTargetPercent = patch.SLOPolicy.AvailabilityTargetPercent
 		service.SLOPolicy.LatencyTargetMilliseconds = patch.SLOPolicy.LatencyTargetMilliseconds
-		service.SLOPolicy.Window = patch.SLOPolicy.Window
+		service.SLOPolicy.TimeWindow = patch.SLOPolicy.Window
 	}
 }

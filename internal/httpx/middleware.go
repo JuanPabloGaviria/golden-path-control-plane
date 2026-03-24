@@ -4,6 +4,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/go-chi/chi/v5"
 )
 
 func RequestIDMiddleware(next http.Handler) http.Handler {
@@ -20,10 +22,12 @@ func LoggingMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 			recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 			start := time.Now()
 			next.ServeHTTP(recorder, r)
+			route := RoutePattern(r)
 
 			logger.Info("http_request",
 				"request_id", RequestIDFromContext(r.Context()),
 				"method", r.Method,
+				"route", route,
 				"path", r.URL.Path,
 				"status", recorder.status,
 				"duration", time.Since(start).String(),
@@ -31,6 +35,20 @@ func LoggingMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 			)
 		})
 	}
+}
+
+func RoutePattern(r *http.Request) string {
+	routeContext := chi.RouteContext(r.Context())
+	if routeContext == nil {
+		return r.URL.Path
+	}
+
+	pattern := routeContext.RoutePattern()
+	if pattern == "" {
+		return r.URL.Path
+	}
+
+	return pattern
 }
 
 type statusRecorder struct {

@@ -29,6 +29,10 @@ type Config struct {
 	IntegrationTestDB string
 }
 
+type TokenIssuerConfig struct {
+	Auth AuthConfig
+}
+
 type DatabaseConfig struct {
 	URL             string
 	MaxOpenConns    int
@@ -117,6 +121,15 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
+func LoadTokenIssuerConfig() (TokenIssuerConfig, error) {
+	authCfg, err := loadAuth()
+	if err != nil {
+		return TokenIssuerConfig{}, err
+	}
+
+	return TokenIssuerConfig{Auth: authCfg}, nil
+}
+
 func (c Config) Redacted() map[string]any {
 	return map[string]any{
 		"app_env":            c.AppEnv,
@@ -172,6 +185,10 @@ func (c Config) validate() error {
 		return errors.New("config: HTTP_ADDR must not be empty")
 	}
 
+	if c.HTTPReadTimeout <= 0 || c.HTTPWriteTimeout <= 0 || c.HTTPIdleTimeout <= 0 || c.ShutdownTimeout <= 0 {
+		return errors.New("config: HTTP and shutdown timeouts must be greater than zero")
+	}
+
 	if c.Observability.ServiceName == "" {
 		return errors.New("config: OTEL_SERVICE_NAME must not be empty")
 	}
@@ -182,6 +199,10 @@ func (c Config) validate() error {
 
 	if c.Worker.BatchSize < 1 {
 		return errors.New("config: WORKER_BATCH_SIZE must be greater than zero")
+	}
+
+	if c.Worker.PollInterval <= 0 || c.Worker.Lease <= 0 {
+		return errors.New("config: WORKER_POLL_INTERVAL and JOB_LEASE_DURATION must be greater than zero")
 	}
 
 	if c.Worker.MaxAttempts < 1 {
@@ -236,6 +257,14 @@ func loadDatabase() (DatabaseConfig, error) {
 
 	if cfg.MinIdleConns < 0 {
 		return DatabaseConfig{}, errors.New("config: DATABASE_MIN_IDLE_CONNS must be zero or greater")
+	}
+
+	if cfg.MinIdleConns > cfg.MaxOpenConns {
+		return DatabaseConfig{}, errors.New("config: DATABASE_MIN_IDLE_CONNS must not exceed DATABASE_MAX_OPEN_CONNS")
+	}
+
+	if cfg.MaxConnLifetime <= 0 || cfg.MaxConnIdleTime <= 0 {
+		return DatabaseConfig{}, errors.New("config: database connection lifetimes must be greater than zero")
 	}
 
 	return cfg, nil

@@ -28,7 +28,7 @@ type Repository interface {
 	InsertAuditEvent(ctx context.Context, event domain.AuditEvent) error
 	ListAuditEvents(ctx context.Context, resourceType string, resourceID *uuid.UUID, limit int) ([]domain.AuditEvent, error)
 	ClaimJobs(ctx context.Context, workerID string, batchSize int, lease time.Duration) ([]domain.Job, error)
-	MarkJobCompleted(ctx context.Context, jobID uuid.UUID) error
+	MarkJobCompleted(ctx context.Context, jobID uuid.UUID, workerID string) error
 	MarkJobFailed(ctx context.Context, job domain.Job, failure error) error
 }
 
@@ -76,7 +76,7 @@ func (c *ControlPlane) RegisterService(ctx context.Context, input domain.Service
 			ServiceID:                 serviceID,
 			AvailabilityTargetPercent: input.SLOPolicy.AvailabilityTargetPercent,
 			LatencyTargetMilliseconds: input.SLOPolicy.LatencyTargetMilliseconds,
-			Window:                    input.SLOPolicy.Window,
+			TimeWindow:                input.SLOPolicy.Window,
 			CreatedAt:                 now,
 			UpdatedAt:                 now,
 		},
@@ -87,7 +87,7 @@ func (c *ControlPlane) RegisterService(ctx context.Context, input domain.Service
 		return domain.Service{}, err
 	}
 
-	if err := c.repo.InsertAuditEvent(ctx, auditEvent(principal, requestID, "service.registered", "service", created.ID, map[string]any{
+	if err := c.repo.InsertAuditEvent(ctx, auditEvent(now, principal, requestID, "service.registered", "service", created.ID, map[string]any{
 		"name": created.Name,
 	})); err != nil {
 		return domain.Service{}, err
@@ -106,7 +106,7 @@ func (c *ControlPlane) UpdateService(ctx context.Context, serviceID uuid.UUID, p
 		return domain.Service{}, err
 	}
 
-	if err := c.repo.InsertAuditEvent(ctx, auditEvent(principal, requestID, "service.updated", "service", updated.ID, map[string]any{
+	if err := c.repo.InsertAuditEvent(ctx, auditEvent(c.now(), principal, requestID, "service.updated", "service", updated.ID, map[string]any{
 		"name": updated.Name,
 	})); err != nil {
 		return domain.Service{}, err
@@ -146,7 +146,7 @@ func (c *ControlPlane) QueueServiceEvaluation(ctx context.Context, serviceID uui
 		return domain.Job{}, err
 	}
 
-	if err := c.repo.InsertAuditEvent(ctx, auditEvent(principal, requestID, "service.evaluation_requested", "service", serviceID, map[string]any{
+	if err := c.repo.InsertAuditEvent(ctx, auditEvent(now, principal, requestID, "service.evaluation_requested", "service", serviceID, map[string]any{
 		"job_id": enqueued.ID.String(),
 	})); err != nil {
 		return domain.Job{}, err
@@ -162,6 +162,10 @@ func (c *ControlPlane) GetScorecard(ctx context.Context, serviceID uuid.UUID) (d
 func (c *ControlPlane) CreateDeploymentCandidate(ctx context.Context, input domain.DeploymentCandidateInput, principal auth.Principal, requestID string) (domain.DeploymentCandidate, error) {
 	if err := input.Validate(); err != nil {
 		return domain.DeploymentCandidate{}, ValidationError{Err: err}
+	}
+
+	if principal.Role == domain.RoleEngineer && principal.Subject != input.RequestedBy {
+		return domain.DeploymentCandidate{}, ValidationError{Err: fmt.Errorf("deployment_candidate.requested_by must match authenticated subject")}
 	}
 
 	if _, err := c.repo.GetService(ctx, input.ServiceID); err != nil {
@@ -187,7 +191,7 @@ func (c *ControlPlane) CreateDeploymentCandidate(ctx context.Context, input doma
 		return domain.DeploymentCandidate{}, err
 	}
 
-	if err := c.repo.InsertAuditEvent(ctx, auditEvent(principal, requestID, "deployment_candidate.created", "deployment_candidate", created.ID, map[string]any{
+	if err := c.repo.InsertAuditEvent(ctx, auditEvent(now, principal, requestID, "deployment_candidate.created", "deployment_candidate", created.ID, map[string]any{
 		"service_id":  created.ServiceID.String(),
 		"environment": created.Environment,
 		"version":     created.Version,
@@ -202,6 +206,10 @@ func (c *ControlPlane) EvaluateDeploymentCandidate(ctx context.Context, candidat
 	candidate, err := c.repo.GetDeploymentCandidate(ctx, candidateID)
 	if err != nil {
 		return domain.DeploymentCandidate{}, err
+	}
+
+	if candidate.Status != domain.CandidateStatusPending {
+		return domain.DeploymentCandidate{}, StateConflictError{Err: fmt.Errorf("deployment candidate %s is already in terminal status %s", candidate.ID, candidate.Status)}
 	}
 
 	snapshot, err := c.repo.GetLatestSnapshot(ctx, candidate.ServiceID)
@@ -245,7 +253,7 @@ func (c *ControlPlane) EvaluateDeploymentCandidate(ctx context.Context, candidat
 		return domain.DeploymentCandidate{}, err
 	}
 
-	if err := c.repo.InsertAuditEvent(ctx, auditEvent(principal, requestID, "deployment_candidate.evaluated", "deployment_candidate", updated.ID, map[string]any{
+	if err := c.repo.InsertAuditEvent(ctx, auditEvent(now, principal, requestID, "deployment_candidate.evaluated", "deployment_candidate", updated.ID, map[string]any{
 		"decision": updated.Status,
 		"reason":   updated.DecisionReason,
 	})); err != nil {
@@ -274,7 +282,7 @@ func (c *ControlPlane) ProcessServiceEvaluationJob(ctx context.Context, job doma
 		return err
 	}
 
-	return c.repo.InsertAuditEvent(ctx, auditEvent(auth.Principal{
+	return c.repo.InsertAuditEvent(ctx, auditEvent(c.now(), auth.Principal{
 		Subject: workerID,
 		Role:    domain.RolePlatformAdmin,
 		Issuer:  "worker",
@@ -285,7 +293,7 @@ func (c *ControlPlane) ProcessServiceEvaluationJob(ctx context.Context, job doma
 	}))
 }
 
-func auditEvent(principal auth.Principal, requestID, eventType, resourceType string, resourceID uuid.UUID, details map[string]any) domain.AuditEvent {
+func auditEvent(now time.Time, principal auth.Principal, requestID, eventType, resourceType string, resourceID uuid.UUID, details map[string]any) domain.AuditEvent {
 	return domain.AuditEvent{
 		ID:           uuid.New(),
 		ActorSubject: principal.Subject,
@@ -295,6 +303,6 @@ func auditEvent(principal auth.Principal, requestID, eventType, resourceType str
 		ResourceID:   resourceID,
 		RequestID:    requestID,
 		Details:      details,
-		CreatedAt:    time.Now().UTC(),
+		CreatedAt:    now,
 	}
 }

@@ -16,7 +16,7 @@ This repository does not claim production readiness. It is a strong v1 control p
 
 - Go `1.25.8`
 - PostgreSQL `16+` for local API, worker, integration tests, and smoke flow
-- Docker only if you want to use [deployments/docker-compose.yml](./deployments/docker-compose.yml)
+- Docker for [deployments/docker-compose.yml](./deployments/docker-compose.yml) and [scripts/compose_smoke.sh](./scripts/compose_smoke.sh)
 
 ## Architecture
 
@@ -61,6 +61,8 @@ set +a
 
 For a full local smoke flow, ensure `DATABASE_URL` points to a running PostgreSQL instance and run `make smoke`.
 
+For a Docker-backed proof that exercises PostgreSQL, API, and worker in containers, run `make smoke-compose`.
+
 For a containerized local stack, use [deployments/docker-compose.yml](./deployments/docker-compose.yml).
 
 ## Quality Gates
@@ -69,6 +71,7 @@ For a containerized local stack, use [deployments/docker-compose.yml](./deployme
 - lint: `make lint`
 - unit tests: `make test`
 - integration tests: `make integration INTEGRATION_DATABASE_URL=...`
+- race tests: `make race`
 - build: `make build`
 - vulnerability scan: `make vuln`
 

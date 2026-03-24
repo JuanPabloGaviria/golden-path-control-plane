@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,7 +18,8 @@ func main() {
 
 	runtime, err := app.Bootstrap(ctx)
 	if err != nil {
-		panic(err)
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
 	}
 	defer func() {
 		_ = runtime.Close(context.Background())

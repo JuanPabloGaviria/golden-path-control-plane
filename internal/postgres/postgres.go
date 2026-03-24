@@ -12,6 +12,7 @@ import (
 )
 
 var ErrNotFound = errors.New("postgres: not found")
+var ErrStateConflict = errors.New("postgres: invalid state transition or lock ownership")
 
 type Store struct {
 	pool *pgxpool.Pool

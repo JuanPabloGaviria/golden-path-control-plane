@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -15,7 +16,20 @@ import (
 var sqlFiles embed.FS
 
 func Ensure(ctx context.Context, pool *pgxpool.Pool) error {
-	if _, err := pool.Exec(ctx, `
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return fmt.Errorf("migrations: acquire connection: %w", err)
+	}
+	defer conn.Release()
+
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, int64(486031)); err != nil {
+		return fmt.Errorf("migrations: acquire advisory lock: %w", err)
+	}
+	defer func() {
+		_, _ = conn.Exec(context.Background(), `SELECT pg_advisory_unlock($1)`, int64(486031))
+	}()
+
+	if _, err := conn.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			version TEXT PRIMARY KEY,
 			applied_at TIMESTAMPTZ NOT NULL
@@ -38,7 +52,7 @@ func Ensure(ctx context.Context, pool *pgxpool.Pool) error {
 			continue
 		}
 
-		applied, err := migrationApplied(ctx, pool, entry.Name())
+		applied, err := migrationApplied(ctx, conn, entry.Name())
 		if err != nil {
 			return err
 		}
@@ -51,7 +65,7 @@ func Ensure(ctx context.Context, pool *pgxpool.Pool) error {
 			return fmt.Errorf("migrations: read file %s: %w", entry.Name(), err)
 		}
 
-		tx, err := pool.Begin(ctx)
+		tx, err := conn.Begin(ctx)
 		if err != nil {
 			return fmt.Errorf("migrations: begin transaction for %s: %w", entry.Name(), err)
 		}
@@ -74,9 +88,13 @@ func Ensure(ctx context.Context, pool *pgxpool.Pool) error {
 	return nil
 }
 
-func migrationApplied(ctx context.Context, pool *pgxpool.Pool, version string) (bool, error) {
+type queryRower interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+func migrationApplied(ctx context.Context, conn queryRower, version string) (bool, error) {
 	var exists bool
-	if err := pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE version = $1)`, version).Scan(&exists); err != nil {
+	if err := conn.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE version = $1)`, version).Scan(&exists); err != nil {
 		return false, fmt.Errorf("migrations: check version %s: %w", version, err)
 	}
 

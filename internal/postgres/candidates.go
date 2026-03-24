@@ -69,23 +69,27 @@ func (s *Store) SavePromotionDecision(ctx context.Context, candidateID uuid.UUID
 	}()
 
 	var snapshotID *uuid.UUID
-	var evaluatedAt *time.Time
+	evaluatedAtValue := time.Now().UTC()
 	if snapshot != nil {
 		snapshotID = &snapshot.ID
-		evaluatedAtValue := time.Now().UTC()
-		evaluatedAt = &evaluatedAtValue
 	}
 
-	if _, err := tx.Exec(ctx, `
+	commandTag, err := tx.Exec(ctx, `
 		UPDATE deployment_candidates
 		SET status = $2,
 		    decision_reason = $3,
 		    last_snapshot_id = $4,
-		    updated_at = NOW(),
+		    updated_at = $5,
 		    evaluated_at = $5
 		WHERE id = $1
-	`, candidateID, status, reason, snapshotID, evaluatedAt); err != nil {
+		  AND status = 'pending'
+	`, candidateID, status, reason, snapshotID, evaluatedAtValue)
+	if err != nil {
 		return domain.DeploymentCandidate{}, fmt.Errorf("postgres: update deployment candidate decision: %w", err)
+	}
+
+	if commandTag.RowsAffected() != 1 {
+		return domain.DeploymentCandidate{}, ErrStateConflict
 	}
 
 	if _, err := tx.Exec(ctx, `
