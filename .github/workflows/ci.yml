@@ -85,6 +85,7 @@ jobs:
           go build ./cmd/worker
           go build ./cmd/cli
           go build ./cmd/migrate
+          go build ./cmd/devoidc
 
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest

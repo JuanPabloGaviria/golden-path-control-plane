@@ -73,6 +73,7 @@ func TestLoadRejectsProductionDatabaseWithoutTLS(t *testing.T) {
 	t.Setenv("AUTH_MODE", "oidc")
 	t.Setenv("AUTH_HMAC_SECRET", "")
 	t.Setenv("AUTH_OIDC_ISSUER_URL", "https://issuer.example.com")
+	t.Setenv("AUTH_ISSUER", "https://issuer.example.com")
 	t.Setenv("DATABASE_URL", "postgres://controlplane:secret@db.internal:5432/controlplane?sslmode=disable")
 
 	_, err := Load()
@@ -82,6 +83,40 @@ func TestLoadRejectsProductionDatabaseWithoutTLS(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "sslmode") {
 		t.Fatalf("expected sslmode error, got %v", err)
+	}
+}
+
+func TestLoadOIDCUsesOIDCIssuerAsAuthIssuer(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("AUTH_MODE", "oidc")
+	t.Setenv("AUTH_HMAC_SECRET", "")
+	t.Setenv("AUTH_ISSUER", "")
+	t.Setenv("AUTH_OIDC_ISSUER_URL", "https://issuer.example.com")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	if cfg.Auth.Issuer != "https://issuer.example.com" {
+		t.Fatalf("expected issuer to be normalized from AUTH_OIDC_ISSUER_URL, got %s", cfg.Auth.Issuer)
+	}
+}
+
+func TestLoadRejectsMismatchedOIDCIssuers(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("AUTH_MODE", "oidc")
+	t.Setenv("AUTH_HMAC_SECRET", "")
+	t.Setenv("AUTH_ISSUER", "https://issuer-a.example.com")
+	t.Setenv("AUTH_OIDC_ISSUER_URL", "https://issuer-b.example.com")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected Load to reject mismatched OIDC issuers")
+	}
+
+	if !strings.Contains(err.Error(), "must match") {
+		t.Fatalf("expected issuer mismatch error, got %v", err)
 	}
 }
 

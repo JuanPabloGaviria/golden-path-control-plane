@@ -326,7 +326,11 @@ func loadAuth() (AuthConfig, error) {
 	}
 
 	if cfg.Issuer == "" {
-		return AuthConfig{}, errors.New("config: AUTH_ISSUER must not be empty")
+		if cfg.Mode == authModeOIDC && cfg.OIDCIssuerURL != "" {
+			cfg.Issuer = cfg.OIDCIssuerURL
+		} else {
+			return AuthConfig{}, errors.New("config: AUTH_ISSUER must not be empty")
+		}
 	}
 
 	switch cfg.Mode {
@@ -344,7 +348,11 @@ func loadAuth() (AuthConfig, error) {
 		}
 	case authModeOIDC:
 		if cfg.OIDCIssuerURL == "" {
-			return AuthConfig{}, errors.New("config: AUTH_OIDC_ISSUER_URL is required when AUTH_MODE=oidc")
+			cfg.OIDCIssuerURL = cfg.Issuer
+		}
+
+		if cfg.Issuer != cfg.OIDCIssuerURL {
+			return AuthConfig{}, errors.New("config: AUTH_ISSUER must match AUTH_OIDC_ISSUER_URL when AUTH_MODE=oidc")
 		}
 	default:
 		return AuthConfig{}, fmt.Errorf("config: AUTH_MODE must be one of %s|%s, got %q", authModeHMAC, authModeOIDC, cfg.Mode)

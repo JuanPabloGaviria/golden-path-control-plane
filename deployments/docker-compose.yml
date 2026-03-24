@@ -1,4 +1,20 @@
 services:
+  local-oidc:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        APP_BIN: devoidc
+    ports:
+      - "9000:9000"
+    environment:
+      OIDC_DEV_ADDR: :9000
+      OIDC_DEV_ISSUER_URL: http://localhost:9000
+      OIDC_DEV_AUDIENCE: golden-path-control-plane
+      OIDC_DEV_ENGINEER_SUBJECT: owner@example.com
+      OIDC_DEV_PLATFORM_ADMIN_SUBJECT: platform-admin@example.com
+      OIDC_DEV_TOKEN_TTL: 1h
+
   postgres:
     image: postgres:16-alpine
     environment:
@@ -39,10 +55,11 @@ services:
       WORKER_BATCH_SIZE: 5
       JOB_LEASE_DURATION: 30s
       JOB_MAX_ATTEMPTS: 5
-      AUTH_MODE: hmac
+      AUTH_MODE: oidc
       AUTH_AUDIENCE: golden-path-control-plane
-      AUTH_ISSUER: golden-path-local
-      AUTH_HMAC_SECRET: ${AUTH_HMAC_SECRET:?AUTH_HMAC_SECRET must be set}
+      AUTH_ISSUER: http://localhost:9000
+      AUTH_OIDC_ISSUER_URL: http://localhost:9000
+      AUTH_OIDC_JWKS_URL: http://local-oidc:9000/keys
       OTEL_SERVICE_NAME: golden-path-control-plane
       OTEL_EXPORTER_OTLP_ENDPOINT: ""
       PROMETHEUS_NAMESPACE: goldenpath
@@ -54,6 +71,8 @@ services:
       args:
         APP_BIN: api
     depends_on:
+      local-oidc:
+        condition: service_started
       migrate:
         condition: service_completed_successfully
       postgres:
@@ -77,10 +96,11 @@ services:
       WORKER_BATCH_SIZE: 5
       JOB_LEASE_DURATION: 30s
       JOB_MAX_ATTEMPTS: 5
-      AUTH_MODE: hmac
+      AUTH_MODE: oidc
       AUTH_AUDIENCE: golden-path-control-plane
-      AUTH_ISSUER: golden-path-local
-      AUTH_HMAC_SECRET: ${AUTH_HMAC_SECRET:?AUTH_HMAC_SECRET must be set}
+      AUTH_ISSUER: http://localhost:9000
+      AUTH_OIDC_ISSUER_URL: http://localhost:9000
+      AUTH_OIDC_JWKS_URL: http://local-oidc:9000/keys
       OTEL_SERVICE_NAME: golden-path-control-plane
       OTEL_EXPORTER_OTLP_ENDPOINT: ""
       PROMETHEUS_NAMESPACE: goldenpath
@@ -92,6 +112,8 @@ services:
       args:
         APP_BIN: worker
     depends_on:
+      local-oidc:
+        condition: service_started
       migrate:
         condition: service_completed_successfully
       postgres:
@@ -113,10 +135,11 @@ services:
       WORKER_BATCH_SIZE: 5
       JOB_LEASE_DURATION: 30s
       JOB_MAX_ATTEMPTS: 5
-      AUTH_MODE: hmac
+      AUTH_MODE: oidc
       AUTH_AUDIENCE: golden-path-control-plane
-      AUTH_ISSUER: golden-path-local
-      AUTH_HMAC_SECRET: ${AUTH_HMAC_SECRET:?AUTH_HMAC_SECRET must be set}
+      AUTH_ISSUER: http://localhost:9000
+      AUTH_OIDC_ISSUER_URL: http://localhost:9000
+      AUTH_OIDC_JWKS_URL: http://local-oidc:9000/keys
       OTEL_SERVICE_NAME: golden-path-control-plane
       OTEL_EXPORTER_OTLP_ENDPOINT: ""
       PROMETHEUS_NAMESPACE: goldenpath

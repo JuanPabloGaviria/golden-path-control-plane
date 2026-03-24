@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 
@@ -21,6 +22,10 @@ type oidcClaims struct {
 }
 
 func newOIDCValidator(ctx context.Context, cfg config.AuthConfig) (Validator, error) {
+	if strings.HasPrefix(cfg.OIDCIssuerURL, "http://") {
+		ctx = oidc.InsecureIssuerURLContext(ctx, cfg.OIDCIssuerURL)
+	}
+
 	var verifier *oidc.IDTokenVerifier
 	if cfg.OIDCJWKSURL != "" {
 		keySet := oidc.NewRemoteKeySet(ctx, cfg.OIDCJWKSURL)
@@ -47,6 +52,14 @@ func (v *oidcValidator) Validate(ctx context.Context, rawToken string) (Principa
 	var claims oidcClaims
 	if err := idToken.Claims(&claims); err != nil {
 		return Principal{}, fmt.Errorf("%w: parse claims: %v", ErrUnauthorized, err)
+	}
+
+	if claims.Sub == "" {
+		return Principal{}, fmt.Errorf("%w: subject claim is required", ErrUnauthorized)
+	}
+
+	if claims.Iss == "" {
+		return Principal{}, fmt.Errorf("%w: issuer claim is required", ErrUnauthorized)
 	}
 
 	role := domain.Role(claims.Role)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/juanpablogaviria/golden-path-control-plane/internal/auth"
 	"github.com/juanpablogaviria/golden-path-control-plane/internal/config"
+	"github.com/juanpablogaviria/golden-path-control-plane/internal/devoidc"
 	"github.com/juanpablogaviria/golden-path-control-plane/internal/domain"
 )
 
@@ -69,13 +71,24 @@ func runToken(args []string) error {
 		return err
 	}
 
-	token, err := auth.IssueHMACToken(cfg.Auth, *subject, domain.Role(*role), *ttl)
-	if err != nil {
-		return err
+	switch cfg.Auth.Mode {
+	case "hmac":
+		token, err := auth.IssueHMACToken(cfg.Auth, *subject, domain.Role(*role), *ttl)
+		if err != nil {
+			return err
+		}
+		fmt.Println(token)
+		return nil
+	case "oidc":
+		token, err := issueOIDCToken(cfg.Auth, *subject, domain.Role(*role))
+		if err != nil {
+			return err
+		}
+		fmt.Println(token)
+		return nil
+	default:
+		return fmt.Errorf("unsupported auth mode %q", cfg.Auth.Mode)
 	}
-
-	fmt.Println(token)
-	return nil
 }
 
 func runRegisterService(args []string) error {
@@ -195,6 +208,84 @@ func doRequest(method, path string, body io.Reader) error {
 	}
 
 	return nil
+}
+
+func issueOIDCToken(cfg config.AuthConfig, subject string, role domain.Role) (string, error) {
+	discoveryURL := strings.TrimSuffix(cfg.OIDCIssuerURL, "/") + "/.well-known/openid-configuration"
+	response, err := http.Get(discoveryURL)
+	if err != nil {
+		return "", fmt.Errorf("cli: fetch oidc discovery document: %w", err)
+	}
+	defer func() {
+		_ = response.Body.Close()
+	}()
+
+	if response.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("cli: discovery endpoint returned status %d", response.StatusCode)
+	}
+
+	var discovery struct {
+		TokenEndpoint string `json:"token_endpoint"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&discovery); err != nil {
+		return "", fmt.Errorf("cli: decode oidc discovery document: %w", err)
+	}
+	if strings.TrimSpace(discovery.TokenEndpoint) == "" {
+		return "", fmt.Errorf("cli: discovery document did not contain token_endpoint")
+	}
+
+	clientID, err := oidcClientIDForRole(role)
+	if err != nil {
+		return "", err
+	}
+
+	form := url.Values{}
+	form.Set("grant_type", "client_credentials")
+	form.Set("client_id", clientID)
+	if strings.TrimSpace(subject) != "" {
+		form.Set("subject", subject)
+	}
+
+	tokenResponse, err := http.PostForm(discovery.TokenEndpoint, form)
+	if err != nil {
+		return "", fmt.Errorf("cli: fetch oidc token: %w", err)
+	}
+	defer func() {
+		_ = tokenResponse.Body.Close()
+	}()
+
+	if tokenResponse.StatusCode != http.StatusOK {
+		payload, _ := io.ReadAll(tokenResponse.Body)
+		return "", fmt.Errorf("cli: token endpoint returned status %d: %s", tokenResponse.StatusCode, strings.TrimSpace(string(payload)))
+	}
+
+	var payload struct {
+		AccessToken string `json:"access_token"`
+		IDToken     string `json:"id_token"`
+	}
+	if err := json.NewDecoder(tokenResponse.Body).Decode(&payload); err != nil {
+		return "", fmt.Errorf("cli: decode oidc token response: %w", err)
+	}
+
+	if strings.TrimSpace(payload.IDToken) != "" {
+		return payload.IDToken, nil
+	}
+	if strings.TrimSpace(payload.AccessToken) != "" {
+		return payload.AccessToken, nil
+	}
+
+	return "", fmt.Errorf("cli: oidc token response did not include a token")
+}
+
+func oidcClientIDForRole(role domain.Role) (string, error) {
+	switch role {
+	case domain.RoleEngineer:
+		return devoidc.EngineerClientID, nil
+	case domain.RolePlatformAdmin:
+		return devoidc.PlatformAdminClientID, nil
+	default:
+		return "", fmt.Errorf("cli: unsupported role %q", role)
+	}
 }
 
 func usage() {
