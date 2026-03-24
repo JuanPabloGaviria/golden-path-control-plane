@@ -1,0 +1,21 @@
+.DS_Store
+.env
+.env.local
+.env.*.local
+.idea/
+.vscode/
+bin/
+dist/
+coverage/
+*.coverprofile
+*.log
+*.out
+*.test
+*.tmp
+*.swp
+*.swo
+tmp/
+
+# Keep source-of-truth assets tracked.
+!.env.example
+!.gitignore
