@@ -19,10 +19,11 @@ type ErrorEnvelope struct {
 }
 
 type ErrorBody struct {
-	Code      string         `json:"code"`
-	Message   string         `json:"message"`
-	RequestID string         `json:"request_id"`
-	Details   map[string]any `json:"details,omitempty"`
+	Code        string         `json:"code"`
+	Message     string         `json:"message"`
+	RequestID   string         `json:"request_id"`
+	Remediation string         `json:"remediation,omitempty"`
+	Details     map[string]any `json:"details,omitempty"`
 }
 
 func DecodeJSON(r *http.Request, target any) error {
@@ -51,12 +52,17 @@ func WriteJSON(w http.ResponseWriter, status int, payload any) {
 }
 
 func RespondError(w http.ResponseWriter, r *http.Request, status int, code, message string, details map[string]any) {
+	RespondErrorWithRemediation(w, r, status, code, message, defaultRemediation(code), details)
+}
+
+func RespondErrorWithRemediation(w http.ResponseWriter, r *http.Request, status int, code, message, remediation string, details map[string]any) {
 	WriteJSON(w, status, ErrorEnvelope{
 		Error: ErrorBody{
-			Code:      code,
-			Message:   message,
-			RequestID: RequestIDFromContext(r.Context()),
-			Details:   details,
+			Code:        code,
+			Message:     message,
+			RequestID:   RequestIDFromContext(r.Context()),
+			Remediation: remediation,
+			Details:     details,
 		},
 	})
 }
@@ -76,4 +82,31 @@ func EnsureRequestID(value string) string {
 	}
 
 	return uuid.NewString()
+}
+
+func defaultRemediation(code string) string {
+	switch code {
+	case "invalid_json":
+		return "Send exactly one JSON document that matches the endpoint schema and retry."
+	case "invalid_service_id", "invalid_candidate_id", "invalid_resource_id":
+		return "Provide a valid UUID for the requested resource and retry."
+	case "invalid_limit":
+		return "Provide an integer limit value and retry."
+	case "missing_bearer_token":
+		return "Set an Authorization header with a Bearer token and retry."
+	case "unauthorized":
+		return "Request a valid token with the expected issuer, audience, expiry, and role claims, then retry."
+	case "forbidden":
+		return "Use a principal with the required role for this endpoint and retry."
+	case "validation_failed":
+		return "Correct the request payload so it satisfies the API validation rules, then retry."
+	case "not_found":
+		return "Verify the resource identifier exists in the current environment and retry."
+	case "state_conflict", "conflict":
+		return "Refresh the resource state, resolve the conflict, and retry with a new request if needed."
+	case "database_unavailable":
+		return "Restore database connectivity and retry once the runtime is healthy."
+	default:
+		return "Retry after correcting the request or investigating the attached error details."
+	}
 }

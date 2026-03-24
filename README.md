@@ -10,7 +10,7 @@ It focuses on one reviewer-grade flow:
 4. Inspect the latest readiness scorecard.
 5. Create and evaluate a deployment candidate against the latest readiness state.
 
-This repository does not claim production readiness. It is a strong v1 control plane with honest boundaries, local operability, Kubernetes-ready deployment assets, CI gates, and a runtime-exercised critical flow.
+This repository does not claim production readiness. It is a strong v1 control plane with honest boundaries, local operability, explicit schema lifecycle, real OIDC/JWKS-authenticated proof paths, Kubernetes assets that are exercised in `kind`, and a runtime-exercised critical flow.
 
 ## Requirements
 
@@ -23,6 +23,8 @@ This repository does not claim production readiness. It is a strong v1 control p
 - `cmd/api`: HTTP API, health, readiness, metrics.
 - `cmd/worker`: async job processor backed by PostgreSQL.
 - `cmd/cli`: small operator and developer CLI.
+- `cmd/migrate`: explicit one-shot schema migrator.
+- `cmd/devoidc`: local OIDC/JWKS proof issuer used by Compose and kind smoke flows.
 - `internal/app`: use cases and orchestration.
 - `internal/auth`: JWT validation for local HMAC and OIDC.
 - `internal/config`: fail-fast config contract.
@@ -55,15 +57,20 @@ set +a
 
 1. Start PostgreSQL.
 2. Export environment variables from `.env.example`.
-3. Run `go run ./cmd/api`.
-4. Run `go run ./cmd/worker`.
-5. Use `go run ./cmd/cli --help`.
+3. Run `go run ./cmd/migrate`.
+4. Run `go run ./cmd/api`.
+5. Run `go run ./cmd/worker`.
+6. Use `go run ./cmd/cli --help`.
 
 For a full local smoke flow, ensure `DATABASE_URL` points to a running PostgreSQL instance and run `make smoke`.
 
-For a Docker-backed proof that exercises PostgreSQL, API, and worker in containers, run `make smoke-compose`.
+For a Docker-backed proof that exercises PostgreSQL, API, worker, and OIDC in containers, run `make smoke-compose`.
+
+For a Kubernetes-backed proof that exercises the local-kind overlay in a real cluster, run `make smoke-kind`.
 
 For a containerized local stack, use [deployments/docker-compose.yml](./deployments/docker-compose.yml).
+
+Kubernetes assets live under [deployments/kubernetes/README.md](./deployments/kubernetes/README.md). Only the `overlays/local-kind` deployment shape is currently verified.
 
 ## Quality Gates
 
@@ -72,8 +79,10 @@ For a containerized local stack, use [deployments/docker-compose.yml](./deployme
 - unit tests: `make test`
 - integration tests: `make integration INTEGRATION_DATABASE_URL=...`
 - race tests: `make race`
+- preflight checks: `make preflight`
 - build: `make build`
 - vulnerability scan: `make vuln`
+- contract and proof evidence: [docs/verification-matrix.md](./docs/verification-matrix.md)
 
 ## Public API
 
