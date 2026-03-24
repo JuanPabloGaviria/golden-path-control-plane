@@ -1,0 +1,62 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: control-plane-migrate
+  labels:
+    app.kubernetes.io/name: control-plane-migrate
+    app.kubernetes.io/component: migrate
+    app.kubernetes.io/part-of: golden-path-control-plane
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: control-plane-migrate
+        app.kubernetes.io/component: migrate
+        app.kubernetes.io/part-of: golden-path-control-plane
+    spec:
+      serviceAccountName: control-plane
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - until pg_isready -h postgres -U controlplane -d controlplane; do sleep 2; done
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+      containers:
+        - name: migrate
+          image: golden-path-control-plane-migrate
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef:
+                name: control-plane-config
+            - secretRef:
+                name: control-plane-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi

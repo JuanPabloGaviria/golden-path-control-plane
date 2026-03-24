@@ -1,0 +1,59 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: golden-path
+
+resources:
+  - ../../base
+  - namespace.yaml
+  - postgres.yaml
+  - local-oidc.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+  - name: control-plane-config
+    literals:
+      - APP_ENV=development
+      - APP_LOG_LEVEL=INFO
+      - HTTP_ADDR=:8080
+      - HTTP_READ_TIMEOUT=10s
+      - HTTP_WRITE_TIMEOUT=15s
+      - HTTP_IDLE_TIMEOUT=60s
+      - SHUTDOWN_TIMEOUT=20s
+      - DATABASE_MAX_OPEN_CONNS=10
+      - DATABASE_MIN_IDLE_CONNS=2
+      - DATABASE_MAX_CONN_LIFETIME=30m
+      - DATABASE_MAX_CONN_IDLE_TIME=5m
+      - WORKER_POLL_INTERVAL=2s
+      - WORKER_BATCH_SIZE=5
+      - JOB_LEASE_DURATION=30s
+      - JOB_MAX_ATTEMPTS=5
+      - AUTH_MODE=oidc
+      - AUTH_AUDIENCE=golden-path-control-plane
+      - AUTH_ISSUER=http://localhost:9000
+      - AUTH_OIDC_ISSUER_URL=http://localhost:9000
+      - AUTH_OIDC_JWKS_URL=http://local-oidc:9000/keys
+      - OTEL_SERVICE_NAME=golden-path-control-plane
+      - OTEL_EXPORTER_OTLP_ENDPOINT=
+      - PROMETHEUS_NAMESPACE=goldenpath
+
+secretGenerator:
+  - name: control-plane-secrets
+    literals:
+      - DATABASE_URL=postgres://controlplane:controlplane@postgres:5432/controlplane?sslmode=disable
+
+images:
+  - name: golden-path-control-plane-api
+    newName: golden-path-control-plane-api
+    newTag: kind
+  - name: golden-path-control-plane-worker
+    newName: golden-path-control-plane-worker
+    newTag: kind
+  - name: golden-path-control-plane-migrate
+    newName: golden-path-control-plane-migrate
+    newTag: kind
+  - name: golden-path-control-plane-devoidc
+    newName: golden-path-control-plane-devoidc
+    newTag: kind

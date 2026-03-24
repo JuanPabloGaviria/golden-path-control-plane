@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-plane-api
+  labels:
+    app.kubernetes.io/name: control-plane-api
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: golden-path-control-plane
+spec:
+  selector:
+    app.kubernetes.io/name: control-plane-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080

@@ -8,7 +8,7 @@ RUN_ID="$(date +%s)"
 SMOKE_SKIP_RUNTIME_START="${SMOKE_SKIP_RUNTIME_START:-0}"
 SMOKE_SKIP_MIGRATE="${SMOKE_SKIP_MIGRATE:-0}"
 
-if [[ -z "${DATABASE_URL:-}" ]]; then
+if [[ "${SMOKE_SKIP_RUNTIME_START}" != "1" || "${SMOKE_SKIP_MIGRATE}" != "1" ]] && [[ -z "${DATABASE_URL:-}" ]]; then
   echo "DATABASE_URL must be set for smoke tests" >&2
   exit 1
 fi

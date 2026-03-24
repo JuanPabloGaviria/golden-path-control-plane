@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: local-oidc
+  labels:
+    app.kubernetes.io/name: local-oidc
+    app.kubernetes.io/component: auth
+    app.kubernetes.io/part-of: golden-path-control-plane
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: local-oidc
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: local-oidc
+        app.kubernetes.io/component: auth
+        app.kubernetes.io/part-of: golden-path-control-plane
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: local-oidc
+          image: golden-path-control-plane-devoidc
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: OIDC_DEV_ADDR
+              value: :9000
+            - name: OIDC_DEV_ISSUER_URL
+              value: http://localhost:9000
+            - name: OIDC_DEV_AUDIENCE
+              value: golden-path-control-plane
+            - name: OIDC_DEV_ENGINEER_SUBJECT
+              value: owner@example.com
+            - name: OIDC_DEV_PLATFORM_ADMIN_SUBJECT
+              value: platform-admin@example.com
+            - name: OIDC_DEV_TOKEN_TTL
+              value: 1h
+          ports:
+            - containerPort: 9000
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: local-oidc
+  labels:
+    app.kubernetes.io/name: local-oidc
+    app.kubernetes.io/component: auth
+    app.kubernetes.io/part-of: golden-path-control-plane
+spec:
+  selector:
+    app.kubernetes.io/name: local-oidc
+  ports:
+    - name: http
+      port: 9000
+      targetPort: http

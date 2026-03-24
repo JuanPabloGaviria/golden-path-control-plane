@@ -2,7 +2,10 @@ GO ?= go
 PKGS := ./...
 INTEGRATION_DATABASE_URL ?=
 
-.PHONY: fmt lint test integration integration-race race smoke smoke-compose build vuln ci
+.PHONY: fmt lint test integration integration-race race preflight smoke smoke-compose smoke-kind build vuln ci
+
+preflight:
+	./scripts/preflight.sh
 
 fmt:
 	$(GO) fmt $(PKGS)
@@ -27,6 +30,9 @@ smoke:
 
 smoke-compose:
 	./scripts/compose_smoke.sh
+
+smoke-kind:
+	./scripts/smoke_kind.sh
 
 build:
 	$(GO) build ./cmd/api
