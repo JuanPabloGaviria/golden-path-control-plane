@@ -12,6 +12,12 @@ It focuses on one reviewer-grade flow:
 
 This repository does not claim production readiness. It is a strong v1 control plane with honest boundaries, local operability, Kubernetes-ready deployment assets, CI gates, and a runtime-exercised critical flow.
 
+## Requirements
+
+- Go `1.25.8`
+- PostgreSQL `16+` for local API, worker, integration tests, and smoke flow
+- Docker only if you want to use [deployments/docker-compose.yml](./deployments/docker-compose.yml)
+
 ## Architecture
 
 - `cmd/api`: HTTP API, health, readiness, metrics.
@@ -52,6 +58,8 @@ set +a
 3. Run `go run ./cmd/api`.
 4. Run `go run ./cmd/worker`.
 5. Use `go run ./cmd/cli --help`.
+
+For a full local smoke flow, ensure `DATABASE_URL` points to a running PostgreSQL instance and run `make smoke`.
 
 For a containerized local stack, use [deployments/docker-compose.yml](./deployments/docker-compose.yml).
 

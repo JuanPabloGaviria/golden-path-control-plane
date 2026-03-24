@@ -1,0 +1,116 @@
+openapi: 3.1.0
+info:
+  title: Golden Path Control Plane API
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+security:
+  - bearerAuth: []
+paths:
+  /healthz:
+    get:
+      security: []
+      responses:
+        "200":
+          description: Liveness check.
+  /readyz:
+    get:
+      security: []
+      responses:
+        "200":
+          description: Readiness check.
+  /metrics:
+    get:
+      security: []
+      responses:
+        "200":
+          description: Prometheus metrics endpoint.
+  /v1/services:
+    post:
+      summary: Register a service.
+      responses:
+        "201":
+          description: Service created.
+  /v1/services/{service_id}:
+    patch:
+      summary: Update a service.
+      parameters:
+        - in: path
+          name: service_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Service updated.
+  /v1/services/{service_id}/evaluations:
+    post:
+      summary: Enqueue a readiness evaluation job.
+      parameters:
+        - in: path
+          name: service_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "202":
+          description: Evaluation job accepted.
+  /v1/services/{service_id}/scorecard:
+    get:
+      summary: Get the latest readiness scorecard.
+      parameters:
+        - in: path
+          name: service_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Latest readiness scorecard.
+  /v1/deployment-candidates:
+    post:
+      summary: Create a deployment candidate.
+      responses:
+        "201":
+          description: Candidate created.
+  /v1/deployment-candidates/{candidate_id}:
+    get:
+      summary: Get a deployment candidate.
+      parameters:
+        - in: path
+          name: candidate_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Candidate found.
+  /v1/deployment-candidates/{candidate_id}/evaluate:
+    post:
+      summary: Evaluate a deployment candidate against the latest readiness snapshot.
+      parameters:
+        - in: path
+          name: candidate_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Candidate evaluated.
+  /v1/audit-events:
+    get:
+      summary: List audit events.
+      responses:
+        "200":
+          description: Audit events returned.
