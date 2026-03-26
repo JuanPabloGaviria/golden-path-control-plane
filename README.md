@@ -2,6 +2,8 @@
 
 `golden-path-control-plane` is a Go-based internal developer platform backend for service onboarding and release readiness.
 
+It is intentionally scoped as a strong, reviewer-grade v1 rather than a fake “platform” full of unexercised abstractions. The repository demonstrates deterministic policy checks, asynchronous release-readiness evaluation, authenticated control-plane APIs, local Kubernetes proof paths, and operational verification gates that are actually run.
+
 It focuses on one reviewer-grade flow:
 
 1. Register a service with ownership, operational metadata, and SLO policy.
@@ -11,6 +13,16 @@ It focuses on one reviewer-grade flow:
 5. Create and evaluate a deployment candidate against the latest readiness state.
 
 This repository does not claim production readiness. It is a strong v1 control plane with honest boundaries, local operability, explicit schema lifecycle, real OIDC/JWKS-authenticated proof paths, Kubernetes assets that are exercised in `kind`, and a runtime-exercised critical flow.
+
+## What This Repo Demonstrates
+
+- internal platform/API design in Go without microservice theater
+- explicit config contracts and fail-fast boot validation
+- authenticated control-plane flows with both local HMAC and OIDC/JWKS proof modes
+- asynchronous worker-driven readiness evaluation and deployment gating
+- OpenAPI-backed contract publication
+- Docker Compose and `kind` proof paths instead of documentation-only deployment claims
+- CI gates that cover formatting, linting, tests, race checks, contract checks, build, vuln scans, config scans, and smoke flows
 
 ## Requirements
 

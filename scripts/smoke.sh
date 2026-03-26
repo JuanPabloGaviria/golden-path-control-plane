@@ -8,6 +8,16 @@ RUN_ID="$(date +%s)"
 SMOKE_SKIP_RUNTIME_START="${SMOKE_SKIP_RUNTIME_START:-0}"
 SMOKE_SKIP_MIGRATE="${SMOKE_SKIP_MIGRATE:-0}"
 
+# Keep the standalone smoke flow self-sufficient for local and CI HMAC proof runs.
+export APP_ENV="${APP_ENV:-development}"
+export APP_LOG_LEVEL="${APP_LOG_LEVEL:-INFO}"
+export AUTH_MODE="${AUTH_MODE:-hmac}"
+export AUTH_AUDIENCE="${AUTH_AUDIENCE:-golden-path-control-plane}"
+export AUTH_ISSUER="${AUTH_ISSUER:-golden-path-local}"
+export AUTH_HMAC_SECRET="${AUTH_HMAC_SECRET:-12345678901234567890123456789012}"
+export OTEL_SERVICE_NAME="${OTEL_SERVICE_NAME:-golden-path-control-plane}"
+export PROMETHEUS_NAMESPACE="${PROMETHEUS_NAMESPACE:-goldenpath}"
+
 if [[ "${SMOKE_SKIP_RUNTIME_START}" != "1" || "${SMOKE_SKIP_MIGRATE}" != "1" ]] && [[ -z "${DATABASE_URL:-}" ]]; then
   echo "DATABASE_URL must be set for smoke tests" >&2
   exit 1
