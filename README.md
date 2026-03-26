@@ -1,64 +1,249 @@
 # golden-path-control-plane
 
-`golden-path-control-plane` is a Go-based internal developer platform backend for service onboarding and release readiness.
+`golden-path-control-plane` is a Go-based internal developer platform backend that focuses on one high-value platform workflow: onboarding services, evaluating release readiness asynchronously, and gating deployment candidates against explicit operational standards.
 
-It is intentionally scoped as a strong, reviewer-grade v1 rather than a fake “platform” full of unexercised abstractions. The repository demonstrates deterministic policy checks, asynchronous release-readiness evaluation, authenticated control-plane APIs, local Kubernetes proof paths, and operational verification gates that are actually run.
+It is deliberately built as a strong, reviewer-grade v1 rather than a fake "platform" padded with unexercised abstractions. The repository demonstrates authenticated control-plane APIs, deterministic golden-path checks, asynchronous worker orchestration, honest local cloud-native proof paths, and verification gates that are actually run.
 
-It focuses on one reviewer-grade flow:
+Current reviewed tag: [`v0.1.1`](https://github.com/JuanPabloGaviria/golden-path-control-plane/tree/v0.1.1)
 
-1. Register a service with ownership, operational metadata, and SLO policy.
-2. Enqueue a readiness evaluation.
-3. Run deterministic golden-path checks in an async worker.
-4. Inspect the latest readiness scorecard.
-5. Create and evaluate a deployment candidate against the latest readiness state.
+## Why This Repo Exists
 
-This repository does not claim production readiness. It is a strong v1 control plane with honest boundaries, local operability, explicit schema lifecycle, real OIDC/JWKS-authenticated proof paths, Kubernetes assets that are exercised in `kind`, and a runtime-exercised critical flow.
+Internal platform work is easy to oversell and easy to fake. Many repos claim:
 
-## What This Repo Demonstrates
+- internal developer platform
+- Kubernetes readiness
+- release engineering
+- observability
+- platform APIs
 
-- internal platform/API design in Go without microservice theater
-- explicit config contracts and fail-fast boot validation
-- authenticated control-plane flows with both local HMAC and OIDC/JWKS proof modes
-- asynchronous worker-driven readiness evaluation and deployment gating
+but stop at static manifests, partial mocks, or hand-wavy architecture.
+
+This repository was built to show a narrower but much more defensible slice:
+
+1. A service is registered with ownership, operational metadata, and an SLO policy.
+2. The platform enqueues a readiness evaluation.
+3. An asynchronous worker runs deterministic golden-path checks.
+4. The latest scorecard becomes queryable through the control plane.
+5. A deployment candidate is evaluated against the current readiness state and either approved or blocked.
+
+That flow is the center of gravity of the repo.
+
+## What This Demonstrates
+
+- Go-based control-plane API design without microservice theater
+- explicit config contracts and fail-fast runtime boot
+- HMAC and OIDC/JWKS-authenticated control-plane access
+- asynchronous worker-driven evaluation and deployment gating
+- PostgreSQL-backed persistence and job leasing semantics
 - OpenAPI-backed contract publication
 - Docker Compose and `kind` proof paths instead of documentation-only deployment claims
-- CI gates that cover formatting, linting, tests, race checks, contract checks, build, vuln scans, config scans, and smoke flows
+- a verification posture that includes formatting, linting, tests, race tests, contract checks, build checks, vuln scans, config scans, and smoke flows
 
-## Requirements
+## System Overview
 
-- Go `1.25.8`
-- PostgreSQL `16+` for local API, worker, integration tests, and smoke flow
-- Docker with the Compose CLI plugin for [deployments/docker-compose.yml](./deployments/docker-compose.yml) and [scripts/compose_smoke.sh](./scripts/compose_smoke.sh)
-- `kubectl`, `kind`, `curl`, and `jq` for the verified local Kubernetes proof
+```mermaid
+flowchart LR
+    CLI["Operator / Developer CLI"] --> API["Control Plane API"]
+    API --> PG["PostgreSQL"]
+    API --> METRICS["Metrics / Logs / Traces"]
+    API --> JOBS["Job Queue (PostgreSQL-backed)"]
+    WORKER["Async Worker"] --> PG
+    WORKER --> JOBS
+    WORKER --> CHECKS["Golden-Path Evaluator"]
+    OIDC["Local OIDC / JWKS Issuer"] --> API
+    CLI --> OIDC
+    CI["CI / Smoke Proofs"] --> API
+    CI --> WORKER
+    CI --> OIDC
+    KIND["kind Overlay"] --> API
+    KIND --> WORKER
+    KIND --> PG
+```
 
-## Architecture
+## Critical Flow
 
-- `cmd/api`: HTTP API, health, readiness, metrics.
-- `cmd/worker`: async job processor backed by PostgreSQL.
-- `cmd/cli`: small operator and developer CLI.
-- `cmd/migrate`: explicit one-shot schema migrator.
-- `cmd/devoidc`: local OIDC/JWKS proof issuer used by Compose and kind smoke flows.
-- `internal/app`: use cases and orchestration.
-- `internal/auth`: JWT validation for local HMAC and OIDC.
-- `internal/config`: fail-fast config contract.
-- `internal/domain`: domain models and validation.
-- `internal/httpx`: HTTP helpers, middleware, and error envelopes.
-- `internal/migrations`: embedded schema migrations.
-- `internal/observability`: logging, tracing, and metrics.
-- `internal/platformchecks`: deterministic readiness rules.
-- `internal/postgres`: PostgreSQL persistence and job queue semantics.
+```mermaid
+sequenceDiagram
+    participant U as Operator
+    participant C as CLI
+    participant A as API
+    participant DB as PostgreSQL
+    participant W as Worker
+    participant E as Evaluator
 
-## Config
+    U->>C: register service
+    C->>A: POST /v1/services
+    A->>DB: persist service + policy
+    A-->>C: service id
 
-The committed contract lives in [`.env.example`](./.env.example).
+    U->>C: queue evaluation
+    C->>A: POST /v1/services/{id}/evaluations
+    A->>DB: persist job
+    A-->>C: accepted
 
-- `.env.example` is documentation only.
-- `.env` is ignored and must never be committed.
-- The binaries read configuration from environment variables.
-- Invalid or placeholder configuration fails boot.
-- Secrets are redacted from diagnostics.
+    W->>DB: lease pending job
+    W->>E: run readiness checks
+    E-->>W: scorecard + findings
+    W->>DB: persist scorecard and audit trail
 
-Load local configuration with shell environment export, for example:
+    U->>C: create deployment candidate
+    C->>A: POST /v1/deployment-candidates
+    A->>DB: persist candidate
+
+    U->>C: evaluate candidate
+    C->>A: POST /v1/deployment-candidates/{id}/evaluate
+    A->>DB: compare candidate against latest readiness state
+    A-->>C: approved or blocked
+```
+
+## Core Capabilities
+
+### Service onboarding
+
+- ownership and operational metadata capture
+- runbook, health endpoint, observability URL, repository URL
+- SLO policy attached at registration time
+
+### Readiness evaluation
+
+- deterministic golden-path rules
+- asynchronous execution through a worker
+- persisted scorecards and findings
+- explicit state transitions instead of implicit readiness assumptions
+
+### Deployment gating
+
+- deployment candidate creation
+- evaluation against latest readiness evidence
+- approval/block decision recorded through the control plane
+
+### Auth and access
+
+- local HMAC proof mode
+- local OIDC/JWKS proof mode
+- audience/issuer validation
+- role-aware token issuance through the CLI
+
+### Operability
+
+- fail-fast configuration
+- health, readiness, and metrics endpoints
+- explicit schema migration workflow
+- structured error envelopes and middleware
+
+## Repository Layout
+
+| Path | Responsibility |
+| --- | --- |
+| `cmd/api` | HTTP control-plane API, health, readiness, metrics |
+| `cmd/worker` | async job processor |
+| `cmd/cli` | operator and developer CLI for proof flows |
+| `cmd/migrate` | one-shot schema migrator |
+| `cmd/devoidc` | local OIDC/JWKS issuer for proof paths |
+| `internal/app` | orchestration and core use cases |
+| `internal/auth` | JWT validation and token handling |
+| `internal/config` | configuration contract and validation |
+| `internal/domain` | domain models and invariants |
+| `internal/httpx` | HTTP middleware and error envelopes |
+| `internal/jobs` | worker runtime behavior |
+| `internal/migrations` | embedded schema lifecycle |
+| `internal/observability` | logging, tracing, metrics wiring |
+| `internal/platformchecks` | deterministic readiness rules |
+| `internal/postgres` | persistence, scorecards, job leasing, audit trail |
+| `openapi/openapi.yaml` | published API contract |
+| `deployments/docker-compose.yml` | containerized local proof path |
+| `deployments/kubernetes/overlays/local-kind` | verified local Kubernetes deployment shape |
+| `docs/verification-matrix.md` | claim-to-proof mapping |
+
+## Public API Surface
+
+### Service lifecycle
+
+- `POST /v1/services`
+- `PATCH /v1/services/{service_id}`
+- `POST /v1/services/{service_id}/evaluations`
+- `GET /v1/services/{service_id}/scorecard`
+
+### Deployment lifecycle
+
+- `POST /v1/deployment-candidates`
+- `POST /v1/deployment-candidates/{candidate_id}/evaluate`
+- `GET /v1/deployment-candidates/{candidate_id}`
+
+### Audit and operability
+
+- `GET /v1/audit-events`
+- `GET /healthz`
+- `GET /readyz`
+- `GET /metrics`
+
+## Local Proof Paths
+
+### Native local runtime
+
+```bash
+set -a
+source .env
+set +a
+
+go run ./cmd/migrate
+go run ./cmd/api
+go run ./cmd/worker
+go run ./cmd/cli --help
+make smoke
+```
+
+### Docker Compose proof
+
+Runs PostgreSQL, API, worker, migrator, and local OIDC in containers:
+
+```bash
+make smoke-compose
+```
+
+### Kubernetes proof
+
+Exercises the verified `kind` overlay with local images and real rollout checks:
+
+```bash
+make smoke-kind
+```
+
+Kubernetes assets are documented in [deployments/kubernetes/README.md](./deployments/kubernetes/README.md). Only the `overlays/local-kind` deployment shape is claimed as verified.
+
+## Verification and Quality Gates
+
+This repository intentionally keeps claims tied to concrete proof. The full claim-to-proof table lives in [docs/verification-matrix.md](./docs/verification-matrix.md).
+
+Primary gates:
+
+- `make tools`
+- `make fmt`
+- `make check-fmt`
+- `make lint`
+- `make test`
+- `make integration INTEGRATION_DATABASE_URL=...`
+- `make race`
+- `make ci`
+- `make contract`
+- `make build`
+- `make render-k8s`
+- `make vuln`
+- `make scan-config`
+- `make scan-image`
+
+## Config Model
+
+The environment contract lives in [`.env.example`](./.env.example).
+
+Key properties:
+
+- `.env.example` is documentation, not a committed runtime secret source
+- invalid or placeholder configuration fails boot
+- production mode rejects unsafe HMAC auth
+- secrets are redacted from diagnostics
+
+Example local shell export:
 
 ```bash
 set -a
@@ -66,54 +251,41 @@ source .env
 set +a
 ```
 
-## Quickstart
+## Design Principles
 
-1. Start PostgreSQL.
-2. Export environment variables from `.env.example`.
-3. Run `go run ./cmd/migrate`.
-4. Run `go run ./cmd/api`.
-5. Run `go run ./cmd/worker`.
-6. Use `go run ./cmd/cli --help`.
+- narrow, defensible scope over fake platform breadth
+- deterministic checks over opaque scoring magic
+- fail fast on invalid configuration
+- explicit schema lifecycle over implicit boot-time migration side effects
+- honest boundaries over "production-ready" theater
+- proof-backed claims over aspirational documentation
 
-For a full local smoke flow, ensure `DATABASE_URL` points to a running PostgreSQL instance and run `make smoke`.
+## Truthfulness Boundaries
 
-For a Docker-backed proof that exercises PostgreSQL, API, worker, and OIDC in containers, run `make smoke-compose`.
+This repo does **not** claim:
 
-For a Kubernetes-backed proof that exercises the local-kind overlay in a real cluster, run `make smoke-kind`.
+- managed cloud deployment proof
+- managed Postgres operations, backup, or disaster recovery
+- external enterprise identity provider integration
+- full production SLO dashboards and paging operations
+- generalized service mesh or multi-cluster platform behavior
 
-For a containerized local stack, use [deployments/docker-compose.yml](./deployments/docker-compose.yml).
+It does claim:
 
-Kubernetes assets live under [deployments/kubernetes/README.md](./deployments/kubernetes/README.md). Only the `overlays/local-kind` deployment shape is currently verified.
+- strong local runtime proof
+- Compose-backed proof
+- `kind`-backed Kubernetes proof
+- authenticated control-plane API flows
+- deterministic readiness evaluation and deployment gating
 
-## Quality Gates
+## Why It Matters
 
-- pinned tool bootstrap: `make tools`
-- formatting write: `make fmt`
-- formatting check: `make check-fmt`
-- lint: `make lint`
-- unit tests: `make test`
-- integration tests: `make integration INTEGRATION_DATABASE_URL=...`
-- race tests: `make race`
-- preflight checks: `make preflight`
-- core non-mutating CI gate: `make ci`
-- OpenAPI contract: `make contract`
-- Kubernetes render check: `make render-k8s`
-- build: `make build`
-- vulnerability scan: `make vuln`
-- config and manifest scan: `make scan-config`
-- image scan: `make scan-image`
-- contract and proof evidence: [docs/verification-matrix.md](./docs/verification-matrix.md)
+The point of this repository is not to imitate a hyperscale platform. The point is to show platform engineering judgment in code:
 
-## Public API
+- choosing a high-leverage slice
+- enforcing explicit standards
+- designing APIs and workers that support operational correctness
+- proving the runtime path instead of merely diagramming it
+- and documenting only what is actually exercised
 
-- `POST /v1/services`
-- `PATCH /v1/services/{service_id}`
-- `POST /v1/services/{service_id}/evaluations`
-- `GET /v1/services/{service_id}/scorecard`
-- `POST /v1/deployment-candidates`
-- `POST /v1/deployment-candidates/{candidate_id}/evaluate`
-- `GET /v1/deployment-candidates/{candidate_id}`
-- `GET /v1/audit-events`
-- `GET /healthz`
-- `GET /readyz`
-- `GET /metrics`
+If you want a repo that demonstrates Go, distributed-system thinking, control-plane design, asynchronous orchestration, cloud-native proof paths, and reviewer-grade engineering discipline, that is what this repository is meant to do.
