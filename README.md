@@ -1,161 +1,135 @@
 # golden-path-control-plane
 
-`golden-path-control-plane` is a Go-based internal developer platform backend that focuses on one high-value platform workflow: onboarding services, evaluating release readiness asynchronously, and gating deployment candidates against explicit operational standards.
-
-It is deliberately built as a strong, reviewer-grade v1 rather than a fake "platform" padded with unexercised abstractions. The repository demonstrates authenticated control-plane APIs, deterministic golden-path checks, asynchronous worker orchestration, honest local cloud-native proof paths, and verification gates that are actually run.
+Control plane for service onboarding, readiness evaluation, and deployment gating, built to show what platform engineering looks like when the runtime has to survive review instead of merely rendering architecture diagrams.
 
 Current reviewed tag: [`v0.1.1`](https://github.com/JuanPabloGaviria/golden-path-control-plane/tree/v0.1.1)
 
-## Why This Repo Exists
+## Abstract
 
-Internal platform work is easy to oversell and easy to fake. Many repos claim:
+`golden-path-control-plane` focuses on a narrow but defensible platform workflow:
 
-- internal developer platform
-- Kubernetes readiness
-- release engineering
-- observability
-- platform APIs
+1. a service is registered with ownership and operational metadata
+2. readiness evidence is requested explicitly
+3. an asynchronous worker executes deterministic platform checks
+4. the latest scorecard becomes durable control-plane state
+5. a deployment candidate is evaluated against that state and either approved or blocked
 
-but stop at static manifests, partial mocks, or hand-wavy architecture.
+That scope is smaller than many "platform" repositories. It is also stronger. The repo avoids pretending that a pile of YAML, a dashboard screenshot, or a static scoring rubric is the same thing as a working control plane.
 
-This repository was built to show a narrower but much more defensible slice:
+## System Thesis
 
-1. A service is registered with ownership, operational metadata, and an SLO policy.
-2. The platform enqueues a readiness evaluation.
-3. An asynchronous worker runs deterministic golden-path checks.
-4. The latest scorecard becomes queryable through the control plane.
-5. A deployment candidate is evaluated against the current readiness state and either approved or blocked.
+The thesis behind this repository is simple:
 
-That flow is the center of gravity of the repo.
+> release readiness is not a spreadsheet problem. It is a control-plane problem with contracts, state transitions, authenticated actions, and durable evidence.
 
-## What This Demonstrates
+Everything in the repository serves that claim: authenticated APIs, worker leasing semantics, published contracts, explicit migration flow, reproducible local proof paths, and platform checks that run deterministically.
 
-- Go-based control-plane API design without microservice theater
-- explicit config contracts and fail-fast runtime boot
-- HMAC and OIDC/JWKS-authenticated control-plane access
-- asynchronous worker-driven evaluation and deployment gating
-- PostgreSQL-backed persistence and job leasing semantics
-- OpenAPI-backed contract publication
-- Docker Compose and `kind` proof paths instead of documentation-only deployment claims
-- a verification posture that includes formatting, linting, tests, race tests, contract checks, build checks, vuln scans, config scans, and smoke flows
+## At A Glance
 
-## System Overview
+| Dimension | Current position |
+| --- | --- |
+| Primary workload | Service registration, readiness evaluation, deployment candidate gating |
+| Implementation language | Go |
+| Persistence | PostgreSQL for control-plane state, jobs, scorecards, and audit trail |
+| Auth posture | HMAC proof mode plus OIDC/JWKS validation |
+| Proof surface | direct local runtime, Docker Compose, and verified `kind` overlay |
+| Verification posture | format, lint, tests, race, contract, build, vulnerability, config, image, and smoke gates |
+
+## Runtime Topology
 
 ```mermaid
 flowchart LR
-    CLI["Operator / Developer CLI"] --> API["Control Plane API"]
-    API --> PG["PostgreSQL"]
-    API --> METRICS["Metrics / Logs / Traces"]
-    API --> JOBS["Job Queue (PostgreSQL-backed)"]
-    WORKER["Async Worker"] --> PG
-    WORKER --> JOBS
-    WORKER --> CHECKS["Golden-Path Evaluator"]
-    OIDC["Local OIDC / JWKS Issuer"] --> API
-    CLI --> OIDC
-    CI["CI / Smoke Proofs"] --> API
-    CI --> WORKER
-    CI --> OIDC
-    KIND["kind Overlay"] --> API
-    KIND --> WORKER
-    KIND --> PG
+  Operator["Operator / Developer"] --> CLI["CLI"]
+  CLI --> API["Control Plane API"]
+  API --> PG[(PostgreSQL)]
+  API --> Contracts["OpenAPI contract"]
+  API --> Obs["metrics / logs / traces"]
+
+  API --> Jobs["job queue (PostgreSQL-backed)"]
+  Worker["Async worker"] --> Jobs
+  Worker --> PG
+  Worker --> Checks["golden-path evaluator"]
+  Worker --> Obs
+
+  OIDC["Local OIDC / JWKS issuer"] --> API
+  CLI --> OIDC
+
+  Compose["Compose smoke"] --> API
+  Compose --> Worker
+  Compose --> OIDC
+
+  Kind["kind overlay"] --> API
+  Kind --> Worker
+  Kind --> PG
 ```
 
 ## Critical Flow
 
 ```mermaid
 sequenceDiagram
-    participant U as Operator
-    participant C as CLI
-    participant A as API
-    participant DB as PostgreSQL
-    participant W as Worker
-    participant E as Evaluator
+  participant O as Operator
+  participant C as CLI
+  participant A as API
+  participant DB as PostgreSQL
+  participant W as Worker
+  participant E as Evaluator
 
-    U->>C: register service
-    C->>A: POST /v1/services
-    A->>DB: persist service + policy
-    A-->>C: service id
+  O->>C: register service
+  C->>A: POST /v1/services
+  A->>DB: persist service and policy
+  A-->>C: service id
 
-    U->>C: queue evaluation
-    C->>A: POST /v1/services/{id}/evaluations
-    A->>DB: persist job
-    A-->>C: accepted
+  O->>C: request readiness evaluation
+  C->>A: POST /v1/services/{id}/evaluations
+  A->>DB: persist job
+  A-->>C: accepted
 
-    W->>DB: lease pending job
-    W->>E: run readiness checks
-    E-->>W: scorecard + findings
-    W->>DB: persist scorecard and audit trail
+  W->>DB: lease pending job
+  W->>E: run deterministic checks
+  E-->>W: scorecard + findings
+  W->>DB: persist evidence and audit trail
 
-    U->>C: create deployment candidate
-    C->>A: POST /v1/deployment-candidates
-    A->>DB: persist candidate
+  O->>C: submit deployment candidate
+  C->>A: POST /v1/deployment-candidates
+  A->>DB: persist candidate
 
-    U->>C: evaluate candidate
-    C->>A: POST /v1/deployment-candidates/{id}/evaluate
-    A->>DB: compare candidate against latest readiness state
-    A-->>C: approved or blocked
+  O->>C: evaluate candidate
+  C->>A: POST /v1/deployment-candidates/{id}/evaluate
+  A->>DB: compare candidate against latest scorecard
+  A-->>C: approved or blocked
 ```
 
-## Core Capabilities
+## What Is Actually Real
 
-### Service onboarding
+- The API, worker, migrator, CLI, and local OIDC issuer all build and run as first-class binaries.
+- Readiness evaluation is asynchronous and durable; it is not simulated inside an HTTP handler.
+- Deployment gating reads persisted readiness state instead of recomputing implied readiness on demand.
+- The Kubernetes claim is limited to the `kind` overlay that the repo actually exercises.
+- OIDC is a local proof asset, not a production identity claim.
 
-- ownership and operational metadata capture
-- runbook, health endpoint, observability URL, repository URL
-- SLO policy attached at registration time
+## Control-Plane Invariants
 
-### Readiness evaluation
+### State and lifecycle
 
-- deterministic golden-path rules
-- asynchronous execution through a worker
-- persisted scorecards and findings
-- explicit state transitions instead of implicit readiness assumptions
+- service registration is explicit
+- evaluation requests are persisted
+- workers lease pending jobs instead of free-running on assumptions
+- deployment approval is derived from the latest stored readiness evidence
 
-### Deployment gating
+### Operational behavior
 
-- deployment candidate creation
-- evaluation against latest readiness evidence
-- approval/block decision recorded through the control plane
+- invalid configuration fails boot
+- schema lifecycle is explicit and checked before runtime starts
+- errors are structured and traceable
+- jobs and scorecards are durable control-plane facts
 
-### Auth and access
+### Truthfulness boundaries
 
-- local HMAC proof mode
-- local OIDC/JWKS proof mode
-- audience/issuer validation
-- role-aware token issuance through the CLI
+- no managed cloud platform is claimed as verified
+- no external enterprise identity provider is claimed as integrated
+- no production SLO dashboarding story is claimed beyond the local proof surface
 
-### Operability
-
-- fail-fast configuration
-- health, readiness, and metrics endpoints
-- explicit schema migration workflow
-- structured error envelopes and middleware
-
-## Repository Layout
-
-| Path | Responsibility |
-| --- | --- |
-| `cmd/api` | HTTP control-plane API, health, readiness, metrics |
-| `cmd/worker` | async job processor |
-| `cmd/cli` | operator and developer CLI for proof flows |
-| `cmd/migrate` | one-shot schema migrator |
-| `cmd/devoidc` | local OIDC/JWKS issuer for proof paths |
-| `internal/app` | orchestration and core use cases |
-| `internal/auth` | JWT validation and token handling |
-| `internal/config` | configuration contract and validation |
-| `internal/domain` | domain models and invariants |
-| `internal/httpx` | HTTP middleware and error envelopes |
-| `internal/jobs` | worker runtime behavior |
-| `internal/migrations` | embedded schema lifecycle |
-| `internal/observability` | logging, tracing, metrics wiring |
-| `internal/platformchecks` | deterministic readiness rules |
-| `internal/postgres` | persistence, scorecards, job leasing, audit trail |
-| `openapi/openapi.yaml` | published API contract |
-| `deployments/docker-compose.yml` | containerized local proof path |
-| `deployments/kubernetes/overlays/local-kind` | verified local Kubernetes deployment shape |
-| `docs/verification-matrix.md` | claim-to-proof mapping |
-
-## Public API Surface
+## Public Surface
 
 ### Service lifecycle
 
@@ -177,115 +151,60 @@ sequenceDiagram
 - `GET /readyz`
 - `GET /metrics`
 
-## Local Proof Paths
+## Proof Surface
 
-### Native local runtime
+| Claim | Proof |
+| --- | --- |
+| The binaries and contracts build cleanly | `go build ./cmd/api ./cmd/worker ./cmd/cli ./cmd/migrate ./cmd/devoidc` |
+| Runtime config rejects unsafe or invalid settings | `go test ./internal/config` |
+| Auth validation rejects bad issuer, audience, expiry, and role | `go test ./internal/auth ./internal/api` |
+| Database bootstrap is explicit and enforced | `go test -tags=integration ./internal/migrations ./internal/app` |
+| Local direct runtime flow is real | `make smoke` |
+| Compose runtime is real | `make smoke-compose` |
+| Kubernetes assets are exercised, not decorative | `make smoke-kind` |
+
+The full claim-to-proof table lives in [docs/verification-matrix.md](docs/verification-matrix.md).
+
+## Repository Guide
+
+- [Verification matrix](docs/verification-matrix.md)
+- [Kubernetes proof surface](deployments/kubernetes/README.md)
+- `openapi/openapi.yaml`
+- `deployments/docker-compose.yml`
+- `deployments/kubernetes/overlays/local-kind`
+
+## Review Path
 
 ```bash
-set -a
-source .env
-set +a
-
-go run ./cmd/migrate
-go run ./cmd/api
-go run ./cmd/worker
-go run ./cmd/cli --help
-make smoke
-```
-
-### Docker Compose proof
-
-Runs PostgreSQL, API, worker, migrator, and local OIDC in containers:
-
-```bash
+make ci
 make smoke-compose
-```
-
-### Kubernetes proof
-
-Exercises the verified `kind` overlay with local images and real rollout checks:
-
-```bash
 make smoke-kind
 ```
 
-Kubernetes assets are documented in [deployments/kubernetes/README.md](./deployments/kubernetes/README.md). Only the `overlays/local-kind` deployment shape is claimed as verified.
-
-## Verification and Quality Gates
-
-This repository intentionally keeps claims tied to concrete proof. The full claim-to-proof table lives in [docs/verification-matrix.md](./docs/verification-matrix.md).
-
-Primary gates:
-
-- `make tools`
-- `make fmt`
-- `make check-fmt`
-- `make lint`
-- `make test`
-- `make integration INTEGRATION_DATABASE_URL=...`
-- `make race`
-- `make ci`
-- `make contract`
-- `make build`
-- `make render-k8s`
-- `make vuln`
-- `make scan-config`
-- `make scan-image`
-
-## Config Model
-
-The environment contract lives in [`.env.example`](./.env.example).
-
-Key properties:
-
-- `.env.example` is documentation, not a committed runtime secret source
-- invalid or placeholder configuration fails boot
-- production mode rejects unsafe HMAC auth
-- secrets are redacted from diagnostics
-
-Example local shell export:
+For contract and platform-asset checks:
 
 ```bash
-set -a
-source .env
-set +a
+make contract
+make render-k8s
+make vuln
+make scan-config
+make scan-image
 ```
 
-## Design Principles
+## Configuration Model
 
-- narrow, defensible scope over fake platform breadth
-- deterministic checks over opaque scoring magic
-- fail fast on invalid configuration
-- explicit schema lifecycle over implicit boot-time migration side effects
-- honest boundaries over "production-ready" theater
-- proof-backed claims over aspirational documentation
+The environment contract is published in [`.env.example`](.env.example).
 
-## Truthfulness Boundaries
+Key rules:
 
-This repo does **not** claim:
+- `.env.example` documents the contract; it is not a secret source
+- invalid or placeholder configuration fails boot
+- production mode rejects unsafe local HMAC shortcuts
+- diagnostics redact sensitive fields
 
-- managed cloud deployment proof
-- managed Postgres operations, backup, or disaster recovery
-- external enterprise identity provider integration
-- full production SLO dashboards and paging operations
-- generalized service mesh or multi-cluster platform behavior
+## Non-Claims
 
-It does claim:
-
-- strong local runtime proof
-- Compose-backed proof
-- `kind`-backed Kubernetes proof
-- authenticated control-plane API flows
-- deterministic readiness evaluation and deployment gating
-
-## Why It Matters
-
-The point of this repository is not to imitate a hyperscale platform. The point is to show platform engineering judgment in code:
-
-- choosing a high-leverage slice
-- enforcing explicit standards
-- designing APIs and workers that support operational correctness
-- proving the runtime path instead of merely diagramming it
-- and documenting only what is actually exercised
-
-If you want a repo that demonstrates Go, distributed-system thinking, control-plane design, asynchronous orchestration, cloud-native proof paths, and reviewer-grade engineering discipline, that is what this repository is meant to do.
+- This repository does not claim a production IDP integration.
+- It does not claim managed-cloud rollout proof.
+- It does not claim that static manifests alone make a platform real.
+- It does claim a reviewer-grade local control plane with authenticated APIs, durable readiness evidence, and reproducible runtime proof paths.
